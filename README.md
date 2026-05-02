@@ -1,8 +1,6 @@
 # Atlas — AI Chat
 
-<p align="center">
-  <img src="./Screenshot_20260502_054530.png" alt="Atlas AI Chat" width="800"/>
-</p>
+Live at https://touhidsiddiqueeraj-bit.github.io/atlas/
 
 ---
 
