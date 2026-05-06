@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<!-- ============================================================
+  Atlas — AI Chat  |  atlas.html
+  ============================================================
+  This file contains only structure (HTML).
+  Styles  → atlas.css
+  Scripts → atlas.js
+
+  All three files must be in the same directory to run locally.
+  Open atlas.html in a browser — no build step required.
+  ============================================================ -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Atlas — AI Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- File generation libraries (loaded on demand) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="atlas.css">
+</head>
+<body>
+<div id="app">
+  <div id="origin-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:600;background:#13131f;border-bottom:2px solid rgba(124,106,255,.5);padding:10px 16px;font-size:13px;color:#e6e6f0;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 4px 20px rgba(0,0,0,.5)">
+  <span style="font-size:18px;flex-shrink:0">⚠️</span>
+  <div style="flex:1;min-width:200px;line-height:1.5">
+    <strong style="color:#7c6aff">Opened as a local file.</strong>
+    Your API key and chats are saved in memory only this session — they won't persist when you close this tab.
+    <span style="color:#8888aa">To persist: bookmark this page or use an HTTP server.</span>
+  </div>
+  <button onclick="document.getElementById('origin-banner').style.display='none'" style="background:rgba(124,106,255,.2);border:1px solid rgba(124,106,255,.4);border-radius:6px;color:#7c6aff;padding:5px 14px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0">Got it ✕</button>
+</div>
+
+<div id="sov" onclick="closeSb()"></div>
+
+  <div id="sidebar">
+    <div class="sb-hd">
+      <div class="logo">Atlas</div>
+      <button class="nb" onclick="newChat()">
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        New
+      </button>
+    </div>
+    <div class="sb-lbl">Conversations</div>
+    <div id="conv-search-wrap"><input id="conv-search" placeholder="🔍 Search…" oninput="filterConvs(this.value)" autocomplete="off"></div>
+    <div id="chatlist"></div>
+    <div class="sb-ft">
+      <div class="akd" onclick="openKeyModal()">
+        <div class="akdot off" id="key-dot"></div>
+        <div class="akt" id="key-text">Click to add API key</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="topbar">
+      <button class="tsb-btn" onclick="toggleSb()" title="Toggle sidebar">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2.5" width="14" height="1.4" rx=".7" fill="currentColor"/><rect x="1" y="7.3" width="14" height="1.4" rx=".7" fill="currentColor"/><rect x="1" y="12.1" width="14" height="1.4" rx=".7" fill="currentColor"/></svg>
+      </button>
+
+      <div id="msw">
+        <button id="msbtn" onclick="toggleMdd()">
+          <span class="m-icon" id="m-icon">🤖</span>
+          <span class="m-name" id="m-name">Select a model</span>
+          <span class="m-price" id="m-price"></span>
+          <span class="m-chev" id="m-chev">▼</span>
+        </button>
+        <div id="mdd">
+          <div class="dd-search-wrap"><input type="text" class="dd-search" id="model-search" placeholder="Search models…" oninput="filterModels(this.value)"></div>
+          <div class="dd-filters" id="dd-filters">
+            <span class="fchip-f active" data-f="all" onclick="setFilter('all',this)">All</span>
+            <span class="fchip-f" data-f="free" onclick="setFilter('free',this)">Free</span>
+            <span class="fchip-f" data-f="vision" onclick="setFilter('vision',this)">Vision</span>
+            <span class="fchip-f" data-f="image" onclick="setFilter('image',this)">🖼️ Image Gen</span>
+            <span class="fchip-f" data-f="tool_use" onclick="setFilter('tool_use',this)">🔧 Tool Use</span>
+            <span class="fchip-f" data-f="openai" onclick="setFilter('openai',this)">OpenAI</span>
+            <span class="fchip-f" data-f="anthropic" onclick="setFilter('anthropic',this)">Anthropic</span>
+            <span class="fchip-f" data-f="google" onclick="setFilter('google',this)">Google</span>
+            <span class="fchip-f" data-f="meta" onclick="setFilter('meta',this)">Meta</span>
+            <span class="fchip-f" data-f="mistral" onclick="setFilter('mistral',this)">Mistral</span>
+          </div>
+          <div id="modellist"><div class="m-loading">Enter API key to load models</div></div>
+        </div>
+      </div>
+
+      <div id="cost-tracker" onclick="openSettings()">
+        <span class="ct-label">Spent</span>
+        <span id="cost-val">$0.0000</span>
+        <span class="ct-div">|</span>
+        <span class="ct-budget" id="budget-disp">No budget</span>
+        <div id="budget-bar-wrap"><div id="budget-bar" style="width:0%"></div></div>
+      </div>
+
+      <!-- [ADDED] Security status indicator in topbar -->
+      <button id="sec-status-btn" onclick="openSettings()" title="Storage security status — click to open settings"
+        style="background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:var(--rx);font-size:13px;transition:all .15s;display:flex;align-items:center;gap:4px;color:var(--tx3);flex-shrink:0">
+        <span id="sec-status-icon">⚠️</span>
+      </button>
+
+      <button class="set-icon-btn" onclick="openSettings()" title="Settings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" stroke-width="1.3"/><path d="M13.7 9.3l-.9-.5a5.2 5.2 0 000-1.6l.9-.5a1 1 0 00.4-1.4l-.8-1.3a1 1 0 00-1.4-.3l-.9.5A5.1 5.1 0 009 3.8V2.8A1 1 0 008 1.8H6.5a1 1 0 00-1 1V3.8a5.1 5.1 0 00-1.9 1.1l-.9-.5a1 1 0 00-1.4.3l-.8 1.3a1 1 0 00.4 1.4l.9.5a5.2 5.2 0 000 1.6l-.9.5a1 1 0 00-.4 1.4l.8 1.3a1 1 0 001.4.3l.9-.5A5.1 5.1 0 005.5 13v1a1 1 0 001 1H8a1 1 0 001-1v-1a5.1 5.1 0 001.9-1.1l.9.5a1 1 0 001.4-.3l.8-1.3a1 1 0 00-.3-1.5z" stroke="currentColor" stroke-width="1.1"/></svg>
+      </button>
+
+    </div>
+
+    <!-- CONTEXT BAR -->
+    <div id="ctx-bar">
+      <span id="ctx-label">No model</span>
+      <div id="ctx-track" onclick="toggleCtxTip()">
+        <div id="ctx-fill" style="width:0%"></div>
+        <div id="ctx-tip"><div id="ctx-tip-row"></div></div>
+      </div>
+    </div>
+
+    <div id="chat-area">
+      <div id="welcome-static">
+        <div class="w-logo">Atlas</div>
+        <p class="w-sub">Unified AI</p>
+      </div>
+    </div>
+
+    <div id="input-zone">
+      <div id="sys-bar">
+        <div class="sys-hdr">
+          <span class="sys-lbl">System Prompt</span>
+          <button class="sys-close" onclick="toggleSys()">✕</button>
+        </div>
+        <textarea id="sys-input" rows="2" placeholder="You are a helpful assistant…"></textarea>
+      </div>
+      <div id="attached-files"></div>
+      <div id="fmt-bar" class="hidden"></div>
+      <div id="clarify-bar">
+        <div class="clarify-q" id="clarify-question"></div>
+        <div class="clarify-actions" id="clarify-options"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="clarify-hint">Answering helps get a better response</span>
+          <button class="clarify-skip" onclick="dismissClarify()">Skip →</button>
+        </div>
+      </div>
+      <div id="active-skill-pill">
+        <span class="pill-icon" id="pill-icon">✦</span>
+        <span id="pill-name">Skill</span>
+        <button class="pill-dismiss" onclick="setActiveSkill(null)" title="Dismiss skill">✕</button>
+      </div>
+      <div id="detected-intent-pill" onclick="applyDetectedIntent()">
+        <span class="pill-icon" id="detected-icon">🧠</span>
+        <span id="detected-name">Detected</span>
+        <button class="use-btn" title="Use this skill">Use</button>
+        <button class="dismiss-btn" onclick="dismissDetectedIntent(event)" title="Dismiss">✕</button>
+      </div>
+      <div id="input-box">
+        <textarea id="user-input" rows="1" placeholder="Message Atlas…" onkeydown="handleKey(event)" oninput="autoResize(this);updateEst();updateCtxBar();scheduleTokenUpdate();checkIntentOnInput(this.value)"></textarea>
+        <div class="input-actions">
+          <button class="i-btn" onclick="document.getElementById('file-input').click()" title="Attach file">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 8l-5.3 5.3a3.7 3.7 0 01-5.2-5.2L8.7 2.7a2.3 2.3 0 013.2 3.2L6.2 11.6a.9.9 0 01-1.3-1.3L10.5 4.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          </button>
+          <button class="i-btn" id="fmt-btn" onclick="toggleFmtBar()" title="Output file format">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M10 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          </button>
+          <button class="i-btn" id="image-gen-btn" onclick="toggleImageGen()" title="Image generation mode">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="5.5" cy="6.5" r="1.2" stroke="currentColor" stroke-width="1.1"/><path d="M1 11l3.5-3.5 3 2.5L11 6l4 5" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button class="i-btn" id="sys-btn" onclick="toggleSys()" title="System prompt">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+          <button class="i-btn" id="skills-btn" onclick="event.stopPropagation();openSettings(); document.getElementById('settings-modal').scrollTop=5000" title="Skills (in Settings)" style="display:none">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1l1.8 3.6L14 5.4l-3 2.9.7 4.1L8 10.4l-3.7 2 .7-4.1L2 5.4l4.2-.8z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="i-btn" id="web-search-btn" onclick="toggleWebSearch()" title="Web search (OpenRouter plugin)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.3"/><path d="M7 2a5 5 0 010 10M7 2a5 5 0 000 10M2 7h10" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M11.5 11.5l2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </button>
+          <button id="send-btn" onclick="sendMessage()" disabled>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5h10M6.5 1.5l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="input-footer">
+        <span id="tok-est" style="opacity:0">~0 tokens</span>
+        <span id="cost-est" style="opacity:0">~$0.000000</span>
+        <span style="opacity:.5;font-size:clamp(9px,1vw,11px)">Shift+Enter for newline · Enter to send</span>
+      </div>
+    </div>
+  </div>
+  <!-- RIGHT MESSAGE NAV (DeepSeek style) -->
+  <div id="msg-nav">
+    <div class="mnav-hd">
+      <span class="mnav-lbl">In this chat</span>
+      <button class="mnav-close" onclick="toggleMsgNav()" title="Close">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 1l11 11M12 1L1 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="mnav-list"><div class="mnav-empty">Send a message<br>to see it here</div></div>
+  </div>
+  <!-- ARTIFACT PANEL -->
+  <div id="artifact-panel">
+    <div id="art-resize-handle" title="Drag to resize"></div>
+    <div id="artifact-hdr">
+      <span id="artifact-title">preview</span>
+      <button class="art-btn" id="art-view-toggle" onclick="toggleArtSource()">⟨/⟩ Source</button>
+      <button class="art-btn" id="art-edit-toggle" onclick="toggleArtEdit()">✏ Edit</button>
+      <button class="art-btn" onclick="openArtNewTab()">↗ New tab</button>
+      <button class="art-btn" onclick="dlArtifact()">⬇ Download</button>
+      <button class="art-btn" id="art-drive-btn" onclick="uploadArtToDrive()" style="display:none" title="Upload to Google Drive">☁ Drive</button>
+      <button class="art-btn close" onclick="closeArtifact()">✕ Close</button>
+    </div>
+    <div id="artifact-tabs"></div>
+    <div id="artifact-frame-wrap">
+      <iframe id="artifact-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe>
+      <div id="artifact-source"></div>
+      <div id="artifact-editor" style="display:none;flex-direction:column;height:100%;background:var(--base)">
+        <div style="padding:8px 12px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx3)">
+          <span>✏ Editing — changes are saved to context when you click Apply</span>
+          <button class="art-btn" style="margin-left:auto" onclick="applyArtEdit()">✓ Apply</button>
+          <button class="art-btn close" onclick="cancelArtEdit()">✕ Cancel</button>
+        </div>
+        <textarea id="artifact-edit-area" spellcheck="false" style="flex:1;width:100%;padding:14px 16px;background:var(--base);color:var(--tx1);border:none;outline:none;resize:none;font-family:'DM Mono',monospace;font-size:13px;line-height:1.6;tab-size:2"></textarea>
+      </div>
+      <!-- OFFICE-STYLE VISUAL EDITOR (DOCX Word + PPTX PowerPoint) -->
+      <div id="artifact-visual-editor">
+        <!-- Ribbon tabs + Apply/Cancel -->
+        <div class="ve-ribbon">
+          <div class="ve-ribbon-tabs">
+            <div class="ve-ribbon-tab active" id="ve-tab-label">Document</div>
+            <div class="ve-ribbon-spacer"></div>
+            <button class="ve-ribbon-action" id="ve-undo-btn" onclick="veUndo()" title="Undo (Ctrl+Z)" style="opacity:.7">↩ Undo</button>
+            <button class="ve-ribbon-action apply" onclick="applyVisualEdit()">✓ Apply</button>
+            <button class="ve-ribbon-action cancel" onclick="cancelVisualEdit()">✕ Cancel</button>
+          </div>
+          <!-- PPTX formatting toolbar (hidden for DOCX) -->
+          <div class="ve-fmt-bar ve-ppt-fmt-bar" id="ve-ppt-fmt-bar" style="display:none;flex-wrap:wrap;gap:2px 4px;padding:5px 8px">
+            <!-- Font group -->
+            <select class="ve-fmt-select" id="ve-ppt-font" title="Font family" onchange="vePptSetFont(this.value)" style="min-width:110px">
+              <option value="'Syne',sans-serif">Syne</option>
+              <option value="'DM Sans',sans-serif">DM Sans</option>
+              <option value="Calibri,sans-serif">Calibri</option>
+              <option value="Arial,sans-serif">Arial</option>
+              <option value="Georgia,serif">Georgia</option>
+              <option value="'Times New Roman',serif">Times New Roman</option>
+              <option value="Verdana,sans-serif">Verdana</option>
+              <option value="'Courier New',monospace">Courier New</option>
+            </select>
+            <input class="ve-font-size-input" id="ve-ppt-size" type="number" value="36" min="8" max="120" title="Title font size" onchange="vePptSetSize(this.value)">
+            <div class="ve-fmt-sep"></div>
+            <!-- Style group -->
+            <button class="ve-fmt-btn" id="vp-bold"      onclick="vePptToggle('bold')"      title="Bold"><b>B</b></button>
+            <button class="ve-fmt-btn" id="vp-italic"    onclick="vePptToggle('italic')"    title="Italic"><i>I</i></button>
+            <button class="ve-fmt-btn" id="vp-underline" onclick="vePptToggle('underline')" title="Underline"><u>U</u></button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Align group -->
+            <button class="ve-fmt-btn" id="vp-left"   onclick="vePptAlign('left')"   title="Align left"   style="font-size:15px;letter-spacing:-1px">⇤</button>
+            <button class="ve-fmt-btn" id="vp-center" onclick="vePptAlign('center')" title="Center"        style="font-size:15px">≡</button>
+            <button class="ve-fmt-btn" id="vp-right"  onclick="vePptAlign('right')"  title="Align right"  style="font-size:15px;letter-spacing:-1px">⇥</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Color group -->
+            <button class="ve-color-btn" id="vp-title-color-btn" title="Title text color" style="background:#7c6aff">
+              <input type="color" id="vp-title-color" value="#ffffff" oninput="vePptSetColor(this.value,'title'); this.parentElement.style.background=this.value">
+            </button>
+            <button class="ve-color-btn" id="vp-body-color-btn" title="Body text color" style="background:#aaa">
+              <input type="color" id="vp-body-color" value="#ffffff" oninput="vePptSetColor(this.value,'body'); this.parentElement.style.background=this.value">
+            </button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Layout group -->
+            <select class="ve-fmt-select" id="ve-ppt-layout" title="Slide layout" onchange="vePptSetLayout(this.value)" style="min-width:120px">
+              <option value="title-bullets">Title + Bullets</option>
+              <option value="title-body">Title + Body</option>
+              <option value="title-only">Title Only</option>
+              <option value="blank">Blank</option>
+              <option value="two-col">Two Column</option>
+              <option value="big-number">Big Number</option>
+            </select>
+            <div class="ve-fmt-sep"></div>
+            <!-- Slide ops group -->
+            <button class="ve-fmt-btn" onclick="vePptDuplicateSlide()" title="Duplicate slide" style="font-size:12px">⧉ Dup</button>
+            <button class="ve-fmt-btn" onclick="vePptMoveSlide(-1)"   title="Move slide left"  style="font-size:13px">◀</button>
+            <button class="ve-fmt-btn" onclick="vePptMoveSlide(1)"    title="Move slide right" style="font-size:13px">▶</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Transition -->
+            <select class="ve-fmt-select" id="ve-ppt-transition" title="Slide transition" onchange="vePptSetTransition(this.value)" style="min-width:100px">
+              <option value="none">No transition</option>
+              <option value="fade">Fade</option>
+              <option value="slide">Slide</option>
+              <option value="zoom">Zoom</option>
+            </select>
+            <div class="ve-fmt-sep"></div>
+            <!-- Insert group -->
+            <button class="ve-fmt-btn" onclick="vePptInsertImage()" title="Insert image" style="font-size:13px">🖼</button>
+            <button class="ve-fmt-btn" onclick="vePptInsertShape()" title="Insert divider" style="font-size:13px">─</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Present -->
+            <button class="ve-fmt-btn" onclick="vePptPresent()" title="Present slideshow" style="font-size:12px;color:#4caf7d;border-color:rgba(76,175,125,.4)">▶ Present</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Background colors inline in toolbar -->
+            <span style="font-size:10px;color:rgba(255,255,255,.45);font-family:'DM Sans',sans-serif;letter-spacing:.3px;padding:0 2px">BG</span>
+            <div id="ve-ppt-bg-toolbar" class="ve-ppt-bg-swatches"></div>
+            <button class="ve-swatch-custom-btn" id="ve-ppt-bg-custom-btn" title="Custom background color">🎨</button>
+            <input type="color" id="ve-ppt-bg-custom-input" style="display:none" onchange="vePptSetBgFromToolbar(this.value)">
+          </div>
+          <!-- DOCX formatting bar (hidden for PPTX) -->
+          <div class="ve-fmt-bar" id="ve-fmt-bar">
+            <select class="ve-fmt-select" id="ve-font-family" onmousedown="veSaveSelection()" onchange="veExecFormat('fontName',this.value)" title="Font">
+              <option value="Georgia">Georgia</option>
+              <option value="'Times New Roman',serif">Times New Roman</option>
+              <option value="'Calibri',sans-serif">Calibri</option>
+              <option value="'Arial',sans-serif">Arial</option>
+              <option value="'Helvetica Neue',sans-serif">Helvetica Neue</option>
+              <option value="'DM Sans',sans-serif">DM Sans</option>
+              <option value="'Trebuchet MS',sans-serif">Trebuchet MS</option>
+              <option value="'Verdana',sans-serif">Verdana</option>
+              <option value="'Tahoma',sans-serif">Tahoma</option>
+              <option value="'Garamond',serif">Garamond</option>
+              <option value="'Palatino Linotype',serif">Palatino</option>
+              <option value="'Book Antiqua',serif">Book Antiqua</option>
+              <option value="'DM Mono',monospace">DM Mono</option>
+              <option value="'Courier New',monospace">Courier New</option>
+              <option value="'Lucida Console',monospace">Lucida Console</option>
+            </select>
+            <input class="ve-font-size-input" id="ve-font-size" type="number" value="13" min="8" max="72" title="Font size" onmousedown="veSaveSelection()" onchange="veExecFormat('fontSize',this.value)">
+            <div class="ve-fmt-sep"></div>
+            <select class="ve-fmt-select" id="ve-para-style" onchange="veApplyParaStyle(this.value)" title="Paragraph style">
+              <option value="p">Normal</option>
+              <option value="h1">Heading 1</option>
+              <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
+              <option value="title">Title</option>
+            </select>
+            <div class="ve-fmt-sep"></div>
+            <button class="ve-fmt-btn" id="vfb-bold" onclick="veExecCmd('bold')" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button class="ve-fmt-btn" id="vfb-italic" onclick="veExecCmd('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button class="ve-fmt-btn" id="vfb-underline" onclick="veExecCmd('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Alignment group - proper SVG icons -->
+            <button class="ve-fmt-btn" id="vfb-left"    onmousedown="veSaveSelection()" onclick="veExecFormat('justifyLeft','');    veSetAlignBtns('left')"    title="Align left (Ctrl+L)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <button class="ve-fmt-btn" id="vfb-center"  onmousedown="veSaveSelection()" onclick="veExecFormat('justifyCenter',''); veSetAlignBtns('center')"  title="Center (Ctrl+E)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="3" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="4" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <button class="ve-fmt-btn" id="vfb-right"   onmousedown="veSaveSelection()" onclick="veExecFormat('justifyRight','');  veSetAlignBtns('right')"   title="Align right (Ctrl+R)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="5" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="7" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <button class="ve-fmt-btn" id="vfb-justify" onmousedown="veSaveSelection()" onclick="veExecFormat('justifyFull','');   veSetAlignBtns('justify')" title="Justify"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="5.5" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="12.5" width="12" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Extra styles -->
+            <button class="ve-fmt-btn" id="vfb-strike" onmousedown="veSaveSelection()" onclick="veExecCmd('strikeThrough')" title="Strikethrough"><s>S</s></button>
+            <button class="ve-fmt-btn" id="vfb-sub"    onmousedown="veSaveSelection()" onclick="veExecCmd('subscript')"    title="Subscript">x<sub>2</sub></button>
+            <button class="ve-fmt-btn" id="vfb-sup"    onmousedown="veSaveSelection()" onclick="veExecCmd('superscript')"  title="Superscript">x<sup>2</sup></button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Indent / Outdent -->
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('outdent')"  title="Decrease indent (Shift+Tab)">⇤</button>
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('indent')"   title="Increase indent (Tab)">⇥</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Lists -->
+            <button class="ve-fmt-btn" id="vfb-ul" onmousedown="veSaveSelection()" onclick="veToggleList('ul')" title="Bullet list">• ≡</button>
+            <button class="ve-fmt-btn" id="vfb-ol" onmousedown="veSaveSelection()" onclick="veToggleList('ol')" title="Numbered list">1. ≡</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Colors -->
+            <button class="ve-color-btn" id="ve-txt-color-btn" title="Text color" style="background:#e8c000" onmousedown="veSaveSelection()">
+              <input type="color" value="#1a1a1a" oninput="veExecFormat('foreColor',this.value); this.parentElement.style.background=this.value">
+            </button>
+            <button class="ve-color-btn" id="ve-hl-color-btn" title="Highlight color" style="background:#ffff00" onmousedown="veSaveSelection()">
+              <input type="color" value="#ffff00" oninput="veExecFormat('hiliteColor',this.value); this.parentElement.style.background=this.value">
+            </button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Clear formatting -->
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('removeFormat')" title="Clear formatting">✕ fmt</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Insert group -->
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veInsertTable()"                        title="Insert table">⊞ Table</button>
+            <button class="ve-fmt-btn"                                  onclick="veInsertImage()"                        title="Insert image">🖼 Img</button>
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veInsertLink()"                         title="Insert link (Ctrl+K)">🔗 Link</button>
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veInsertPageBreak()"                    title="Insert page break">⎙ PgBrk</button>
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('insertHorizontalRule')"      title="Horizontal rule">─ HR</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Undo / Redo -->
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('undo')"  title="Undo (Ctrl+Z)">↩</button>
+            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('redo')"  title="Redo (Ctrl+Y)">↪</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Find & Replace -->
+            <button class="ve-fmt-btn" onclick="veOpenFindReplace()" title="Find &amp; Replace (Ctrl+H)">🔍 F&amp;R</button>
+            <div class="ve-fmt-sep"></div>
+            <!-- Word count + Print -->
+            <button class="ve-fmt-btn" id="vfb-wc" onclick="veShowWordCount()" title="Word count">Wc</button>
+            <button class="ve-fmt-btn" onclick="vePrint()" title="Print document">🖨</button>
+            <div class="ve-fmt-sep"></div>
+            <button class="ve-fmt-btn" onclick="veOpenPageSetup()" title="Page setup" style="font-weight:700;color:#aac4ff">⚙ Page</button>
+            <input type="file" id="ve-img-input" accept="image/*" style="display:none" onchange="veHandleImageUpload(this)">
+          </div>
+          <!-- Find & Replace bar -->
+          <div id="ve-fnr-bar">
+            <input id="ve-fnr-find"    placeholder="Find…"    style="padding:3px 8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:3px;color:#fff;font-size:11px;outline:none;width:130px">
+            <input id="ve-fnr-replace" placeholder="Replace…" style="padding:3px 8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:3px;color:#fff;font-size:11px;outline:none;width:130px">
+            <button class="ve-fmt-btn" onclick="veFnrNext()"    title="Find next">▼ Next</button>
+            <button class="ve-fmt-btn" onclick="veFnrReplace()" title="Replace once">Replace</button>
+            <button class="ve-fmt-btn" onclick="veFnrReplaceAll()" title="Replace all">All</button>
+            <button class="ve-fmt-btn" onclick="veCloseFindReplace()" style="color:#ffaaaa">✕</button>
+            <span id="ve-fnr-count" style="font-size:10px;color:rgba(255,255,255,.5)"></span>
+          </div>
+        </div>
+        <!-- Page Setup Modal -->
+<div id="ve-page-setup-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+  <div style="background:#1a2540;border-radius:10px;padding:24px 28px;min-width:380px;max-width:460px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.5);color:#e0e6f0;font-family:'DM Sans',sans-serif">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:#fff">⚙ Page Setup</h3>
+      <button onclick="veClosePageSetup()" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <!-- Page Size -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Page Size</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="ve-ps-chip active" data-size="A4"      onclick="vePageSetupChip(this,'size')">A4</button>
+        <button class="ve-ps-chip"        data-size="Letter"  onclick="vePageSetupChip(this,'size')">Letter</button>
+        <button class="ve-ps-chip"        data-size="Legal"   onclick="vePageSetupChip(this,'size')">Legal</button>
+        <button class="ve-ps-chip"        data-size="A3"      onclick="vePageSetupChip(this,'size')">A3</button>
+        <button class="ve-ps-chip"        data-size="A5"      onclick="vePageSetupChip(this,'size')">A5</button>
+      </div>
+    </div>
+    <!-- Orientation -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Orientation</label>
+      <div style="display:flex;gap:6px">
+        <button class="ve-ps-chip active" data-orient="portrait"  onclick="vePageSetupChip(this,'orient')">◻ Portrait</button>
+        <button class="ve-ps-chip"        data-orient="landscape" onclick="vePageSetupChip(this,'orient')">▭ Landscape</button>
+      </div>
+    </div>
+    <!-- Margins -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Margins (mm)</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label style="font-size:10px;color:#7799bb">Top</label><br>
+          <input id="ve-ps-mt" type="number" value="25" min="0" max="80" style="width:100%;padding:4px 8px;background:#0d1b2e;border:1px solid #2a3f6f;border-radius:4px;color:#e0e6f0;font-size:13px;box-sizing:border-box"></div>
+        <div><label style="font-size:10px;color:#7799bb">Bottom</label><br>
+          <input id="ve-ps-mb" type="number" value="25" min="0" max="80" style="width:100%;padding:4px 8px;background:#0d1b2e;border:1px solid #2a3f6f;border-radius:4px;color:#e0e6f0;font-size:13px;box-sizing:border-box"></div>
+        <div><label style="font-size:10px;color:#7799bb">Left</label><br>
+          <input id="ve-ps-ml" type="number" value="25" min="0" max="80" style="width:100%;padding:4px 8px;background:#0d1b2e;border:1px solid #2a3f6f;border-radius:4px;color:#e0e6f0;font-size:13px;box-sizing:border-box"></div>
+        <div><label style="font-size:10px;color:#7799bb">Right</label><br>
+          <input id="ve-ps-mr" type="number" value="25" min="0" max="80" style="width:100%;padding:4px 8px;background:#0d1b2e;border:1px solid #2a3f6f;border-radius:4px;color:#e0e6f0;font-size:13px;box-sizing:border-box"></div>
+      </div>
+    </div>
+    <!-- Page numbers -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Page Numbers</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="ve-ps-chip active" data-pgnum="none"   onclick="vePageSetupChip(this,'pgnum')">None</button>
+        <button class="ve-ps-chip"        data-pgnum="bottom-center" onclick="vePageSetupChip(this,'pgnum')">Bottom Center</button>
+        <button class="ve-ps-chip"        data-pgnum="bottom-right"  onclick="vePageSetupChip(this,'pgnum')">Bottom Right</button>
+        <button class="ve-ps-chip"        data-pgnum="top-center"    onclick="vePageSetupChip(this,'pgnum')">Top Center</button>
+        <button class="ve-ps-chip"        data-pgnum="top-right"     onclick="vePageSetupChip(this,'pgnum')">Top Right</button>
+      </div>
+    </div>
+    <!-- Column count -->
+    <div style="margin-bottom:18px">
+      <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Columns</label>
+      <div style="display:flex;gap:6px">
+        <button class="ve-ps-chip active" data-cols="1" onclick="vePageSetupChip(this,'cols')">1 Column</button>
+        <button class="ve-ps-chip"        data-cols="2" onclick="vePageSetupChip(this,'cols')">2 Columns</button>
+        <button class="ve-ps-chip"        data-cols="3" onclick="vePageSetupChip(this,'cols')">3 Columns</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="veClosePageSetup()" style="padding:7px 18px;background:#1e3055;border:1px solid #2a4a8a;border-radius:5px;color:#aac;font-size:12px;cursor:pointer">Cancel</button>
+      <button onclick="veApplyPageSetup()" style="padding:7px 18px;background:#2b579a;border:none;border-radius:5px;color:#fff;font-size:12px;cursor:pointer;font-weight:700">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Body: swapped by _openVisualEditor -->
+        <div id="ve-body" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
+        <!-- Floating block toolbar for word editor -->
+        <div class="ve-block-toolbar" id="ve-block-toolbar">
+          <button class="ve-bt-btn" id="vbt-h1" onclick="veSetBlockType('h1')" title="Heading 1">H1</button>
+          <button class="ve-bt-btn" id="vbt-h2" onclick="veSetBlockType('h2')" title="Heading 2">H2</button>
+          <button class="ve-bt-btn" id="vbt-h3" onclick="veSetBlockType('h3')" title="Heading 3">H3</button>
+          <button class="ve-bt-btn" id="vbt-p"  onclick="veSetBlockType('p')"  title="Normal text">¶</button>
+          <button class="ve-bt-btn" id="vbt-li" onclick="veSetBlockType('li')" title="Bullet">•</button>
+          <div class="ve-bt-sep"></div>
+          <button class="ve-bt-btn" onclick="veDeleteBlock()" title="Delete block" style="color:#c00">✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file-input" multiple accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.html,.css,.json,.csv,.xml,.pdf,.png,.jpg,.jpeg,.gif,.webp" onchange="attachFiles(this.files)">
+
+<!-- API KEY MODAL -->
+<div class="modal-overlay" id="key-modal">
+  <div class="modal">
+    <div class="modal-title">Connect API</div>
+    <!-- Provider toggle -->
+    <div style="display:flex;gap:6px;margin-bottom:16px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);padding:4px">
+      <button id="prov-btn-openrouter" onclick="switchProvider('openrouter')"
+        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:var(--acc);color:#fff">
+        OpenRouter
+      </button>
+      <button id="prov-btn-deepseek" onclick="switchProvider('deepseek')"
+        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
+        DeepSeek
+      </button>
+      <button id="prov-btn-gemini" onclick="switchProvider('gemini')"
+        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
+        Gemini
+      </button>
+      <button id="prov-btn-openai" onclick="switchProvider('openai')"
+        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
+        OpenAI
+      </button>
+      <button id="prov-btn-local" onclick="switchProvider('local')"
+        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
+        Local
+      </button>
+    </div>
+    <div id="prov-desc-openrouter" class="modal-desc">Paste your OpenRouter API key. Stored in memory only — never saved to disk or sent anywhere except OpenRouter.</div>
+    <div id="prov-desc-deepseek" class="modal-desc" style="display:none">Paste your DeepSeek API key. Stored in memory only — never saved to disk or sent anywhere except DeepSeek.</div>
+    <div id="prov-desc-gemini" class="modal-desc" style="display:none">Paste your Google AI (Gemini) API key. Get one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--acc)">aistudio.google.com</a>. Stored in memory only.</div>
+    <div id="prov-desc-openai" class="modal-desc" style="display:none">Paste your OpenAI API key. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--acc)">platform.openai.com</a>. Stored in memory only.</div>
+    <div id="prov-desc-local" class="modal-desc" style="display:none">Connect to a locally hosted AI server (Ollama, LM Studio, llama.cpp, etc.). Uses the OpenAI-compatible <code style="font-family:'DM Mono',monospace;color:var(--acc)">/v1/chat/completions</code> API. API key is optional.</div>
+    <!-- Local provider extra fields (shown only when Local is active) -->
+    <div id="local-url-wrap" style="display:none">
+      <div class="modal-label">Server URL</div>
+      <input type="text" class="modal-input" id="local-url-input" placeholder="http://localhost:11434" autocomplete="off" style="font-family:'DM Mono',monospace">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:-8px;margin-bottom:10px">
+        <button onclick="document.getElementById('local-url-input').value='http://localhost:11434'" style="padding:3px 9px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:11px;color:var(--tx2);cursor:pointer">Ollama :11434</button>
+        <button onclick="document.getElementById('local-url-input').value='http://localhost:1234'" style="padding:3px 9px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:11px;color:var(--tx2);cursor:pointer">LM Studio :1234</button>
+        <button onclick="document.getElementById('local-url-input').value='http://localhost:8080'" style="padding:3px 9px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:11px;color:var(--tx2);cursor:pointer">llama.cpp :8080</button>
+      </div>
+    </div>
+    <div class="modal-label" id="api-key-label">API Key</div>
+    <input type="password" class="modal-input" id="api-key-input" placeholder="sk-or-v1-…" autocomplete="off">
+    <div id="key-err" style="color:var(--red);font-size:12px;margin-top:-8px;margin-bottom:12px;display:none"></div>
+    <div class="modal-actions">
+      <button class="modal-btn secondary" onclick="closeKeyModal()">Cancel</button>
+      <button class="modal-btn primary" id="key-connect-btn" onclick="saveKey()">Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal wide">
+    <div class="modal-title">Settings</div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Appearance</div>
+      <div class="settings-row">
+        <span class="settings-row-label">Theme</span>
+        <div style="display:flex;gap:6px">
+          <button id="theme-dark-btn" onclick="setTheme('dark')" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);border:1px solid var(--acc2);color:#fff">🌙 Dark</button>
+          <button id="theme-light-btn" onclick="setTheme('light')" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);border:1px solid var(--bdr);color:var(--tx2)">☀️ Light</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Chat Font</span>
+        <select id="sl-font" style="flex:1;max-width:200px;padding:6px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Sans',sans-serif" onchange="previewFont(this.value)">
+          <option value="DM Sans">DM Sans (Default)</option>
+          <option value="Inter">Inter</option>
+          <option value="Geist">Geist</option>
+          <option value="Fira Code">Fira Code (Mono)</option>
+          <option value="JetBrains Mono">JetBrains Mono</option>
+          <option value="Source Serif 4">Source Serif 4</option>
+          <option value="Lora">Lora</option>
+          <option value="Nunito">Nunito</option>
+          <option value="Syne">Syne</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Font Size</span>
+        <input type="range" class="slider" id="sl-fontsize" min="12" max="20" step="1" value="14" oninput="previewFontSize(this.value);document.getElementById('val-fontsize').textContent=this.value+'px'">
+        <span class="settings-row-val" id="val-fontsize">14px</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Chat Density</span>
+        <input type="range" class="slider" id="sl-density" min="0" max="2" step="1" value="1" oninput="previewChatDensity(this.value);document.getElementById('val-density').textContent=['Compact','Normal','Spacious'][this.value]">
+        <span class="settings-row-val" id="val-density">Normal</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Generation</div>
+      <div class="settings-row"><span class="settings-row-label">Temperature</span><input type="range" class="slider" id="sl-temp" min="0" max="2" step="0.05" value="0.55" oninput="document.getElementById('val-temp').textContent=parseFloat(this.value).toFixed(2)"><span class="settings-row-val" id="val-temp">0.55</span></div>
+      <div class="settings-row"><span class="settings-row-label">Max Tokens</span><input type="range" class="slider" id="sl-maxtok" min="256" max="32000" step="256" value="4096" oninput="document.getElementById('val-maxtok').textContent=parseInt(this.value).toLocaleString()"><span class="settings-row-val" id="val-maxtok">4,096</span></div>
+      <div class="settings-row"><span class="settings-row-label">Top P</span><input type="range" class="slider" id="sl-topp" min="0" max="1" step="0.05" value="0.95" oninput="document.getElementById('val-topp').textContent=parseFloat(this.value).toFixed(2)"><span class="settings-row-val" id="val-topp">0.95</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Image Generation</div>
+      <div class="settings-row"><span class="settings-row-label">Default Image Model</span><select id="sl-img-model" style="flex:1;padding:6px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Sans',sans-serif"><option value="">Auto (from chat model)</option></select></div>
+      <div class="settings-row"><span class="settings-row-label">Image Size</span><select id="sl-img-size" style="flex:1;padding:6px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Sans',sans-serif"><option value="1024x1024">1024×1024 (Square)</option><option value="1792x1024">1792×1024 (Landscape)</option><option value="1024x1792">1024×1792 (Portrait)</option></select></div>
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Code Editing</div>
+      <div class="settings-row" style="align-items:flex-start;gap:12px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--tx1);font-weight:500;margin-bottom:4px">Smart Patch Mode</div>
+          <div style="font-size:11px;color:var(--tx3);line-height:1.55">When editing generated code, Atlas sends only the changed snippet as a surgical patch instead of rewriting the entire file. <span style="color:var(--ylw,#f5a623);font-weight:500">⚠ Uses more input tokens</span> — each edit includes the full generated file as context.</div>
+        </div>
+        <label class="toggle-pill" style="flex-shrink:0;margin-top:2px">
+          <input type="checkbox" id="toggle-smart-patch" onchange="S.cfg.smartPatch = this.checked">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Budget Cap (USD)</div>
+      <div class="budget-wrap"><span class="budget-sym">$</span><input type="number" class="budget-field" id="budget-input" placeholder="0.00 = unlimited" min="0" step="0.01"></div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:6px">Sending is blocked once this amount is reached. Leave empty or 0 for unlimited.</div>
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Session Cost</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;color:var(--tx2)">Total spent this session</span>
+        <span id="modal-cost" style="font-family:'DM Mono',monospace;font-size:14px;color:var(--grn)">$0.0000</span>
+      </div>
+      <div id="gemini-free-note" style="display:none!important;margin-top:6px;font-size:11px;color:var(--grn);background:var(--grnd);border:1px solid rgba(45,212,160,.2);border-radius:var(--rx);padding:6px 10px">
+      <div id="gemini-cost-track-row" style="display:none;margin-top:8px">
+        <div class="settings-row" style="margin-bottom:0">
+          <span class="settings-row-label" style="font-size:12px;color:var(--tx2)">Gemini tier</span>
+          <span id="gemini-tier-label" style="font-size:12px;color:var(--tx3);font-family:'DM Mono',monospace">Detecting…</span>
+        </div>
+        <div style="font-size:10px;color:var(--tx3);margin-top:3px;line-height:1.5">Tier is detected automatically from your API key. Paid tier users get cost tracking enabled.</div>
+      </div>
+      <div style="margin-top:10px"><button class="modal-btn secondary" onclick="resetCost()" style="font-size:11px;padding:6px 12px">Reset counter</button></div>
+    </div>
+    <div class="divider"></div>
+    <!-- [CHANGED] Memory → Storage & Security section -->
+    <div class="settings-group">
+      <div class="modal-label">Storage &amp; Security</div>
+
+      <!-- Insecure storage warning banner -->
+      <div id="insecure-storage-warning" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,95,109,.1);border:1px solid rgba(255,95,109,.35);border-radius:var(--rs);font-size:11px;color:var(--red);line-height:1.55">
+        ⚠ <strong>Insecure API keys detected</strong> — Your API keys were found in localStorage. Migrate them to secure storage below.
+        <button onclick="migrateFromLocalStorage()" style="margin-left:8px;padding:2px 8px;background:var(--red);border:none;border-radius:4px;color:#fff;font-size:10px;cursor:pointer">Migrate now</button>
+      </div>
+
+      <!-- Storage usage meter -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:13px;color:var(--tx2)">IndexedDB usage</span>
+        <span id="storage-size" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--tx3)">Calculating…</span>
+      </div>
+      <div style="height:4px;background:var(--bdr);border-radius:2px;margin-bottom:4px;overflow:hidden">
+        <div id="storage-usage-bar" style="height:100%;background:var(--acc);border-radius:2px;width:0%;transition:width .4s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tx3);margin-bottom:10px">
+        <span id="storage-conv-count">— conversations</span>
+        <span id="storage-quota-label"></span>
+      </div>
+
+      <!-- API key status indicator -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs)">
+        <span id="key-security-icon" style="font-size:14px">⚠️</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;color:var(--tx1);font-weight:500" id="key-security-label">API Key Storage</div>
+          <div style="font-size:10px;color:var(--tx3)" id="key-security-sub">No keys stored</div>
+        </div>
+      </div>
+
+      <!-- Key storage buttons -->
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:6px;font-weight:500">API Key Persistence</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="modal-btn secondary" onclick="saveCurrentKeySessionOnly()" style="font-size:11px;padding:6px 12px">⏱ This session only</button>
+        <button class="modal-btn secondary" onclick="saveCurrentKeyToBrowser()" style="font-size:11px;padding:6px 12px">🔒 Save in browser</button>
+      </div>
+
+      <!-- Data actions -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="modal-btn secondary" onclick="exportAllData()" style="font-size:11px;padding:6px 12px">⬇ Export chats</button>
+        <button class="modal-btn secondary" onclick="document.getElementById('import-file-input').click()" style="font-size:11px;padding:6px 12px">⬆ Import chats</button>
+        <button class="modal-btn secondary" id="gdrive-backup-btn" onclick="backupToDrive()" style="font-size:11px;padding:6px 12px;display:none">☁ Backup to Drive</button>
+        <button class="modal-btn secondary" id="gdrive-restore-btn" onclick="restoreFromDrive()" style="font-size:11px;padding:6px 12px;display:none">☁ Restore from Drive</button>
+        <button class="modal-btn secondary" onclick="clearAllDataConfirm()" style="font-size:11px;padding:6px 12px;color:var(--red)">🗑 Clear all data</button>
+      </div>
+      <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllData(this)">
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Global System Prompt</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:8px;line-height:1.55">Injected into every conversation. Sets tone, format, and behavior across all models.</div>
+      <textarea id="global-sysprompt-input" style="width:100%;min-height:110px;padding:9px 12px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--tx1);font-size:clamp(11px,1.4vw,12px);font-family:'DM Mono',monospace;outline:none;resize:vertical;transition:border-color .15s;line-height:1.6" oninput="this.style.borderColor='var(--acc2)'" onblur="this.style.borderColor='var(--bdr)'"></textarea>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="modal-btn secondary" onclick="applyPresetPrompt('smart')" style="font-size:10px;padding:4px 10px">✦ Smart</button>
+        <button class="modal-btn secondary" onclick="applyPresetPrompt('concise')" style="font-size:10px;padding:4px 10px">⚡ Concise</button>
+        <button class="modal-btn secondary" onclick="applyPresetPrompt('technical')" style="font-size:10px;padding:4px 10px">🔧 Technical</button>
+        <button class="modal-btn secondary" onclick="applyPresetPrompt('clear')" style="font-size:10px;padding:4px 10px">🧹 Clear</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <!-- Skills Settings -->
+    <div class="settings-group" id="skills-settings-section">
+      <div class="modal-label">Skills</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px;line-height:1.5">Skills adjust how Atlas responds. Auto-detect shows intent while you type.</div>
+      
+      <!-- Smart Auto-Detect Toggle -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:8px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs)">
+        <div>
+          <div style="font-size:12px;color:var(--tx1);font-weight:500">Smart Auto-Detect</div>
+          <div style="font-size:10px;color:var(--tx3)">Show detected skill while typing</div>
+        </div>
+        <label class="toggle-pill">
+          <input type="checkbox" id="skill-auto-toggle" onchange="toggleSmartSkills(this.checked)">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+      
+      <!-- Available Skills List -->
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Available Skills:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div class="skill-badge" data-skill="frontend" onclick="setActiveSkill('frontend')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎨 Frontend</div>
+        <div class="skill-badge" data-skill="document" onclick="setActiveSkill('document')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">📄 Document</div>
+        <div class="skill-badge" data-skill="code" onclick="setActiveSkill('code')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">💻 Code</div>
+        <div class="skill-badge" data-skill="analysis" onclick="setActiveSkill('analysis')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🧠 Analysis</div>
+        <div class="skill-badge" data-skill="data" onclick="setActiveSkill('data')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">📊 Data</div>
+        <div class="skill-badge" data-skill="gamedev" onclick="setActiveSkill('gamedev')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎮 Game</div>
+        <div class="skill-badge" data-skill="creative" onclick="setActiveSkill('creative')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎭 Creative</div>
+      </div>
+      <button class="modal-btn secondary" onclick="openSkillsModalFromSettings()" style="margin-top:12px;width:100%">Manage All Skills →</button>
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group">
+      <div class="modal-label">Don'ts — Response Preferences</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px;line-height:1.5">Things you don't want Atlas / the model to do. These are injected into the system prompt automatically.</div>
+      <textarea id="donts-input" style="width:100%;min-height:88px;padding:9px 12px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--tx1);font-size:clamp(12px,1.5vw,13px);font-family:'DM Mono',monospace;outline:none;resize:vertical;transition:border-color .15s;line-height:1.55" placeholder="e.g. Don't add unnecessary caveats&#10;Don't use bullet points&#10;Don't be overly verbose" oninput="this.style.borderColor='var(--acc2)'" onblur="this.style.borderColor='var(--bdr)'"></textarea>
+    </div>
+    <div class="divider"></div>
+    <div class="settings-group" id="google-connectors-section">
+      <div class="modal-label">Google Connectors</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;line-height:1.55">Sign in with Google to let the AI use Gmail, Calendar, and Drive. The model will ask for confirmation before any action is taken.</div>
+      <button class="gconn-btn" id="gconn-signin-btn" onclick="googleSignIn()">
+        <div class="gconn-avatar-placeholder">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.566 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+        </div>
+        <div class="gconn-info">
+          <div class="gconn-name" id="gconn-name-label">Sign in with Google</div>
+          <div class="gconn-email" id="gconn-email-label">Connect Gmail, Calendar & Drive</div>
+        </div>
+        <span class="gconn-status off" id="gconn-status-badge">Not connected</span>
+      </button>
+      <div class="gconn-scopes" id="gconn-scopes" style="display:none">
+        <div class="gconn-scope" id="scope-gmail">📧 Gmail</div>
+        <div class="gconn-scope" id="scope-calendar">📅 Calendar</div>
+        <div class="gconn-scope" id="scope-drive">📁 Drive</div>
+      </div>
+      <div id="gconn-signout-wrap" style="display:none;margin-top:10px">
+        <button class="modal-btn secondary" onclick="googleSignOut()" style="font-size:11px;padding:6px 12px;color:var(--red)">🔌 Disconnect Google</button>
+      </div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:10px;line-height:1.55;padding:8px 10px;background:var(--surf);border-radius:var(--rx);border:1px solid var(--bdr)">
+        ℹ Only tool-capable models can use connectors. Your Google OAuth Client ID is pre-configured.
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="modal-actions">
+      <button class="modal-btn secondary" onclick="closeSettings()">Cancel</button>
+      <button class="modal-btn primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- SKILL EDIT MODAL -->
+<div id="skill-edit-modal">
+  <div class="skill-edit-card">
+    <div class="skill-edit-hdr">
+      <span class="skill-edit-title" id="skill-edit-title">Edit Skill</span>
+      <button class="skills-close" onclick="closeSkillEdit()">✕</button>
+    </div>
+    <div class="skill-edit-body">
+      <div>
+        <div class="skill-edit-label">Icon</div>
+        <div class="skill-edit-icon-row" id="skill-edit-icons"></div>
+      </div>
+      <div>
+        <div class="skill-edit-label">Name</div>
+        <input type="text" class="skill-edit-input" id="skill-edit-name" placeholder="Skill name" maxlength="40">
+      </div>
+      <div>
+        <div class="skill-edit-label">Description <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--tx3)">(shown on card)</span></div>
+        <input type="text" class="skill-edit-input" id="skill-edit-desc" placeholder="Short description…" maxlength="100">
+      </div>
+      <div>
+        <div class="skill-edit-label">System Prompt</div>
+        <textarea class="skill-edit-textarea" id="skill-edit-prompt" placeholder="Instructions injected before every message when this skill is active…"></textarea>
+      </div>
+    </div>
+    <div class="skill-edit-footer">
+      <span class="skill-edit-hint" id="skill-edit-hint"></span>
+      <div style="display:flex;gap:8px">
+        <button class="modal-btn secondary" id="skill-reset-btn" onclick="resetBuiltinSkill()" style="font-size:12px;padding:6px 14px;display:none">↺ Reset</button>
+        <button class="modal-btn secondary" onclick="closeSkillEdit()" style="font-size:12px;padding:6px 14px">Cancel</button>
+        <button class="modal-btn primary" onclick="saveSkillEdit()" style="font-size:12px;padding:6px 14px">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SKILLS MODAL -->
+<div id="skills-modal">
+  <div class="skills-card">
+    <div class="skills-hdr">
+      <span class="skills-hdr-title">✦ Skills</span>
+      <span class="skills-hdr-sub" id="skills-auto-status"></span>
+      <button class="skills-close" onclick="closeSkillsModal()">✕</button>
+    </div>
+    <div class="skills-body">
+      <div>
+        <div class="skills-section-label">Built-in Skills</div>
+        <div class="skills-grid" id="builtin-skills-grid"></div>
+      </div>
+      <div id="custom-skills-section" style="display:none">
+        <div class="skills-section-label">Custom Skills</div>
+        <div class="skills-grid" id="custom-skills-grid"></div>
+      </div>
+      <div>
+        <div class="skills-section-label">Import Skill</div>
+        <div class="skills-import">
+          <div class="skills-import-tabs">
+            <button class="simp-tab active" onclick="switchImportTab('github',this)">🔗 GitHub URL</button>
+            <button class="simp-tab" onclick="switchImportTab('paste',this)">📋 Paste Text</button>
+            <button class="simp-tab" onclick="switchImportTab('file',this)">📁 Upload File</button>
+          </div>
+          <div id="simp-github" class="simp-panel">
+            <div class="skills-import-row">
+              <input type="text" id="skill-gh-url" placeholder="https://github.com/user/repo/blob/main/skill.md" autocomplete="off">
+              <button class="skills-import-btn" onclick="importSkillFromGithub()">⬇ Fetch</button>
+            </div>
+            <div style="font-size:10px;color:var(--tx3)">Accepts github.com blob URLs or raw.githubusercontent.com links</div>
+          </div>
+          <div id="simp-paste" class="simp-panel" style="display:none">
+            <input type="text" id="skill-paste-name" placeholder="Skill name" style="margin-bottom:6px">
+            <div class="skills-import-row">
+              <textarea id="skill-paste-body" placeholder="Paste your skill system prompt here…"></textarea>
+              <button class="skills-import-btn" onclick="importSkillFromPaste()">＋ Add</button>
+            </div>
+          </div>
+          <div id="simp-file" class="simp-panel" style="display:none">
+            <div class="skills-import-row">
+              <input type="text" id="skill-file-name" placeholder="Skill name (auto-filled from filename)">
+              <button class="skills-import-btn" onclick="document.getElementById('skill-file-input').click()">📁 Browse</button>
+            </div>
+            <input type="file" id="skill-file-input" accept=".md,.txt,.text" style="display:none" onchange="importSkillFromFile(this)">
+            <div style="font-size:10px;color:var(--tx3)">Supports .md and .txt files</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding-top:4px;border-top:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2)">
+          <input type="checkbox" id="skill-auto-toggle" onchange="toggleSmartSkills(this.checked)" style="accent-color:var(--acc);width:14px;height:14px">
+          <span>🧠 Smart auto-detect skill from message</span>
+        </label>
+        <button class="skills-import-btn" style="font-size:11px;padding:5px 10px" onclick="setActiveSkill(null);closeSkillsModal()">✕ Clear skill</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="atlas.js"></script>
+
+<!-- TOOL CONFIRM MODAL -->
+<div id="tool-confirm-modal">
+  <div class="tc-card">
+    <div class="tc-title" id="tc-title">🔧 Tool Action</div>
+    <div class="tc-desc" id="tc-desc">The model wants to perform the following action:</div>
+    <div class="tc-payload" id="tc-payload"></div>
+    <div class="tc-actions">
+      <button class="modal-btn secondary" onclick="_tcResolve(false)">✕ Deny</button>
+      <button class="modal-btn primary" onclick="_tcResolve(true)" style="background:var(--grn);color:#000">✓ Allow</button>
+    </div>
+  </div>
+</div>
+
+<button id="dbg-tab" onclick="toggleDbg()">DEBUG</button>
+<div id="dbg-panel">
+  <div id="dbg-hdr">
+    <span id="dbg-title">🔬 Debug Console</span>
+    <span id="dbg-status">Idle</span>
+    <button class="dbg-btn" onclick="testConn()">⚡ Test Key</button>
+    <button class="dbg-btn" onclick="testRaw()">📡 Raw Request</button>
+    <button class="dbg-btn" onclick="testKnownModel()" style="background:#1a2e1a;border-color:#2dd4a0;color:#2dd4a0">✅ Test Known Model</button>
+    <button class="dbg-btn" onclick="clearDbg()">Clear</button>
+    <button class="dbg-btn" onclick="toggleDbg()">✕ Close</button>
+  </div>
+  <div id="dbg-log"><div style="color:#4e4e6a;padding:6px 0">Tap ⚡ Test Key or 📡 Raw Request to diagnose. Logs appear here during sends.</div></div>
+</div>
+
+<div id="acct-modal">
+  <div class="acct-card">
+    <span class="acct-icon">🔒</span>
+    <div class="acct-title">Account Verification Required</div>
+    <div class="acct-sub">Your OpenRouter account needs either credits or phone verification before routing requests — even to free models.</div>
+    <div class="acct-steps">
+      <div class="acct-step">
+        <div class="acct-step-num">1</div>
+        <div class="acct-step-txt"><strong>Add credits</strong> — even $1 unlocks all free models. OpenRouter uses this to verify you're human.</div>
+      </div>
+      <div class="acct-step">
+        <div class="acct-step-num">2</div>
+        <div class="acct-step-txt"><strong>OR verify your phone</strong> — go to Settings → Account on OpenRouter and complete phone verification for free access.</div>
+      </div>
+      <div class="acct-step">
+        <div class="acct-step-num">3</div>
+        <div class="acct-step-txt"><strong>Come back</strong> — once done, all models will work immediately with no changes needed here.</div>
+      </div>
+    </div>
+    <div class="acct-btns">
+      <a class="acct-btn-primary" href="https://openrouter.ai/credits" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M1 6h14" stroke="currentColor" stroke-width="1.3"/></svg>
+        Add Credits at openrouter.ai
+      </a>
+      <a class="acct-btn-primary" href="https://openrouter.ai/settings" target="_blank" rel="noopener" style="background:linear-gradient(135deg,#2a2a4a,#3a3a5a);border:1px solid var(--bdr2)">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 100 12A6 6 0 008 2z" stroke="currentColor" stroke-width="1.3"/><path d="M8 6v2l1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Verify Phone at openrouter.ai/settings
+      </a>
+      <button class="acct-btn-secondary" onclick="closeAcctModal()">Dismiss — I'll fix this later</button>
+    </div>
+    <div class="acct-note">Your API key <span id="acct-key-hint" style="font-family:'DM Mono',monospace;color:var(--acc)"></span> is valid. This is an account-level restriction, not a code issue.</div>
+  </div>
+</div>
+</body>
+</html>
