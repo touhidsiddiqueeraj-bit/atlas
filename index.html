@@ -19,6 +19,12 @@
 <!-- File generation libraries (loaded on demand) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="atlas.css">
+<!-- [NEW] WebLLM for in-browser local model inference via WebGPU -->
+<script type="module">
+  import * as webllm from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js";
+  window.WebLLM = webllm;
+  window.dispatchEvent(new Event('webllm-loaded'));
+</script>
 </head>
 <body>
 <div id="app">
@@ -741,6 +747,60 @@
       </div>
       <div style="font-size:10px;color:var(--tx3);margin-top:10px;line-height:1.55;padding:8px 10px;background:var(--surf);border-radius:var(--rx);border:1px solid var(--bdr)">
         ℹ Only tool-capable models can use connectors. Your Google OAuth Client ID is pre-configured.
+      </div>
+    </div>
+    <div class="divider"></div>
+    <!-- [NEW] Local Model Fallback section -->
+    <div class="settings-group" id="local-model-settings-section">
+      <div class="modal-label">Local Model (WebGPU)</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px;line-height:1.55">Run a small open-source model entirely in your browser. Used automatically when no API keys are configured. Requires a WebGPU-capable browser (Chrome 113+).</div>
+
+      <!-- WebGPU compatibility warning -->
+      <div id="webgpu-warning" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,160,50,.1);border:1px solid rgba(255,160,50,.35);border-radius:var(--rs);font-size:11px;color:#f5a623;line-height:1.55">
+        ⚠ <strong>WebGPU not available</strong> — Your browser doesn't support WebGPU. Use Chrome 113+ or Edge 113+ on desktop for local models.
+      </div>
+
+      <!-- Enable toggle -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:8px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs)">
+        <div>
+          <div style="font-size:12px;color:var(--tx1);font-weight:500">Enable local fallback</div>
+          <div style="font-size:10px;color:var(--tx3)">Auto-use when no cloud API keys are set</div>
+        </div>
+        <label class="toggle-pill">
+          <input type="checkbox" id="toggle-local-fallback" onchange="LocalModelManager.setFallbackEnabled(this.checked)">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+
+      <!-- Model selector -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <select id="local-model-select" style="flex:1;padding:6px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Sans',sans-serif" onchange="LocalModelManager.setSelectedModel(this.value)">
+          <option value="TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC">TinyLlama 1.1B — 638 MB (fastest)</option>
+          <option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM2 1.7B — 980 MB</option>
+          <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2B — 1.2 GB (best quality)</option>
+        </select>
+      </div>
+
+      <!-- Status indicator + download button -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div id="local-model-status-icon" class="lm-status-dot lm-status-none"></div>
+        <span id="local-model-status-text" style="font-size:12px;color:var(--tx3);flex:1">Not downloaded</span>
+        <button id="local-model-dl-btn" class="modal-btn secondary" style="font-size:11px;padding:5px 12px" onclick="LocalModelManager.downloadSelected()">⬇ Download</button>
+        <button id="local-model-del-btn" class="modal-btn secondary" style="font-size:11px;padding:5px 12px;color:var(--red);display:none" onclick="LocalModelManager.deleteSelected()">🗑 Remove</button>
+      </div>
+
+      <!-- Progress bar -->
+      <div id="local-model-progress-wrap" style="display:none;margin-bottom:8px">
+        <div class="lm-progress-bar-bg">
+          <div id="local-model-progress-bar" class="lm-progress-bar-fill" style="width:0%"></div>
+        </div>
+        <div id="local-model-progress-text" style="font-size:10px;color:var(--tx3);margin-top:4px;text-align:center">0%</div>
+      </div>
+
+      <!-- Cached models list -->
+      <div id="local-model-cached-wrap" style="display:none">
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:5px">Downloaded models:</div>
+        <div id="local-model-cached-list" style="display:flex;flex-wrap:wrap;gap:5px"></div>
       </div>
     </div>
     <div class="divider"></div>
