@@ -1371,3 +1371,60 @@ body.light .skill-edit-btn { color:#111 }
   font-size:10px;color:var(--tx3);padding:0 2px;
   font-family:'DM Mono',monospace;
 }
+
+/* ── [NEW] Local Model Settings ──────────────────────────────────────────── */
+/* Status indicator dot */
+.lm-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  transition: background .2s;
+}
+.lm-status-none    { background: var(--tx3); opacity: .5; }
+.lm-status-ready   { background: var(--grn, #2dd4a0); box-shadow: 0 0 6px rgba(45,212,160,.5); }
+.lm-status-loading { background: #f5a623; box-shadow: 0 0 6px rgba(245,166,35,.4);
+  animation: lm-pulse .9s ease-in-out infinite alternate; }
+.lm-status-error   { background: var(--red, #ff5f6d); }
+
+@keyframes lm-pulse {
+  from { opacity: .6; }
+  to   { opacity: 1;  }
+}
+
+/* Progress bar */
+.lm-progress-bar-bg {
+  height: 5px; background: var(--bdr); border-radius: 3px; overflow: hidden;
+}
+.lm-progress-bar-fill {
+  height: 100%; background: var(--acc); border-radius: 3px;
+  transition: width .3s ease;
+  animation: lm-bar-shine 1.4s linear infinite;
+  background-image: linear-gradient(90deg,
+    var(--acc) 0%, var(--acc2, #9d8fff) 50%, var(--acc) 100%);
+  background-size: 200% 100%;
+}
+@keyframes lm-bar-shine {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Cached model chips */
+.lm-cached-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; background: var(--elev); border: 1px solid var(--bdr);
+  border-radius: 12px; font-size: 10px; color: var(--grn, #2dd4a0);
+}
+.lm-cached-chip.active-chip {
+  border-color: rgba(45,212,160,.5); background: var(--grnd);
+}
+
+/* "Using local model" indicator in chat topbar area */
+#local-model-indicator {
+  display: none; align-items: center; gap: 5px;
+  padding: 3px 9px; background: var(--grnd); border: 1px solid rgba(45,212,160,.3);
+  border-radius: 10px; font-size: 11px; color: var(--grn, #2dd4a0);
+  font-family: 'DM Sans', sans-serif; flex-shrink: 0;
+}
+#local-model-indicator.show { display: inline-flex; }
+
+/* Light theme overrides */
+[data-theme="light"] .lm-status-ready { box-shadow: 0 0 6px rgba(20,170,120,.4); }
+[data-theme="light"] .lm-progress-bar-fill { background-image: none; background: var(--acc); }
