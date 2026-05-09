@@ -3255,7 +3255,21 @@ async function sendMessage() {
   dismissDetectedIntent();
   
   const activeKey = S.provider === 'deepseek' ? S.deepseekKey : S.provider === 'gemini' ? S.geminiKey : S.provider === 'openai' ? S.openaiKey : S.provider === 'local' ? (S.localKey || 'local') : S.key;
-  if (!activeKey) { openKeyModal(); return; }
+  // [MODIFIED] Local model fallback: when no cloud key is set, check if we should use local
+  if (!activeKey) {
+    if (LocalModelManager.fallbackEnabledButNotDownloaded()) {
+      toast('Local model not downloaded — open Settings → Local Model to download first', 'er');
+      openSettings();
+      return;
+    }
+    if (!LocalModelManager.shouldUseFallback()) {
+      openKeyModal();
+      return;
+    }
+    // Use local model path
+    await _sendWithLocalModel(text);
+    return;
+  }
 
   // Clarifying questions — only on first message of a conversation
   if (!_clarifyResolved) {
@@ -5648,6 +5662,9 @@ function openSettings() {
     settingsModal.classList.add('open');
   }
   
+  // [NEW] Sync local model settings UI
+  LocalModelManager.initSettingsUI();
+
   const gfn = document.getElementById('gemini-free-note');
   if (gfn) gfn.style.display = 'none'; // removed per design
   const gctr = document.getElementById('gemini-cost-track-row');
@@ -10053,3 +10070,409 @@ openSettings = function() {
     document.addEventListener('mouseup', onUp);
   });
 })();
+
+// ── [NEW] _sendWithLocalModel — handles the full send/receive cycle using WebLLM ──
+async function _sendWithLocalModel(text) {
+  // Show the local model indicator in topbar
+  LocalModelManager.showLocalModelIndicator(true);
+
+  // Build message for display
+  const userIdx = S.msgs.length;
+  S.msgs.push({ role: 'user', content: text });
+  appendMsg(userIdx);
+
+  const inp = document.getElementById('user-input');
+  if (inp) { inp.value = ''; autoResize(inp); }
+
+  // Prepare message history (last 20 turns to keep context manageable)
+  const historyMsgs = S.msgs.slice(-20).map(m => ({
+    role: m.role === 'user' ? 'user' : 'assistant',
+    content: typeof m.content === 'string' ? m.content : (m.content?.[0]?.text || ''),
+  }));
+
+  // Add system prompt if configured
+  const sysprompt = (document.getElementById('sys-input')?.value?.trim() || '')
+    || (S.cfg.globalSysPrompt?.trim() || '');
+  const apiMessages = sysprompt
+    ? [{ role: 'system', content: sysprompt }, ...historyMsgs]
+    : historyMsgs;
+
+  // Create placeholder assistant bubble
+  const aIdx = S.msgs.length;
+  S.msgs.push({ role: 'assistant', content: '' });
+  appendMsg(aIdx);
+  const bubble = document.getElementById('bubble-' + aIdx);
+  const mdEl   = bubble ? bubble.querySelector('.md-content') || bubble : bubble;
+
+  S.streaming = true;
+  const sendBtn = document.getElementById('send-btn');
+  if (sendBtn) { sendBtn.classList.add('stop'); sendBtn.innerHTML = '⏹'; }
+
+  let fullText = '';
+  try {
+    fullText = await LocalModelManager.generateResponse(apiMessages, (delta, isStatus) => {
+      if (isStatus) return; // skip loading progress tokens
+      fullText += delta;
+      // Live-update the bubble with rendered markdown
+      if (mdEl) {
+        try {
+          mdEl.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
+        } catch {
+          mdEl.textContent = fullText;
+        }
+      }
+      scrollToBottom();
+    });
+
+    S.msgs[aIdx].content = fullText;
+    if (mdEl) {
+      try { mdEl.innerHTML = DOMPurify.sanitize(marked.parse(fullText)); }
+      catch { mdEl.textContent = fullText; }
+    }
+
+    // Persist conversation
+    if (typeof saveCurrentConv === 'function') saveCurrentConv();
+    else if (typeof persist === 'function') persist();
+
+    toast('🖥️ Response from local model', 'ok');
+  } catch (err) {
+    console.error('[LocalModel] generateResponse error:', err);
+    const errMsg = `⚠ Local model error: ${err.message || err}`;
+    S.msgs[aIdx].content = errMsg;
+    if (mdEl) mdEl.textContent = errMsg;
+    toast('Local model error — check console', 'er');
+  } finally {
+    S.streaming = false;
+    if (sendBtn) {
+      sendBtn.classList.remove('stop');
+      sendBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5h10M6.5 1.5l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    }
+  }
+}
+// ── END _sendWithLocalModel ────────────────────────────────────────────────
+
+// ── [NEW] LOCAL MODEL MANAGER ──────────────────────────────────────────────
+// Uses WebLLM (WebGPU) to run small LLMs directly in the browser.
+// Activated automatically when no cloud API keys are configured AND
+// the user has enabled the fallback toggle in Settings.
+//
+// localStorage keys:
+//   atlas-local-model             — selected model id string
+//   atlas-fallback-enabled        — "true" | "false"
+//   atlas-local-model-downloaded  — JSON array of downloaded model ids
+
+const LocalModelManager = (() => {
+  // ── Constants ─────────────────────────────────────────────────────────────
+  const LS_MODEL    = 'atlas-local-model';
+  const LS_ENABLED  = 'atlas-fallback-enabled';
+  const LS_CACHED   = 'atlas-local-model-downloaded';
+
+  const MODELS = [
+    { id: 'TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC', label: 'TinyLlama 1.1B',  size: '638 MB' },
+    { id: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2 1.7B',    size: '980 MB' },
+    { id: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma 2B',         size: '1.2 GB' },
+  ];
+
+  // ── Internal state ────────────────────────────────────────────────────────
+  let _engine       = null;   // WebLLM MLCEngine instance
+  let _loadedModel  = null;   // model id currently loaded in _engine
+  let _downloading  = false;
+
+  // ── Persisted helpers ──────────────────────────────────────────────────────
+  function _getCached() {
+    try { return JSON.parse(localStorage.getItem(LS_CACHED) || '[]'); } catch { return []; }
+  }
+  function _setCached(arr) {
+    try { localStorage.setItem(LS_CACHED, JSON.stringify(arr)); } catch {}
+  }
+  function _getSelected() {
+    return localStorage.getItem(LS_MODEL) || MODELS[0].id;
+  }
+  function _isEnabled() {
+    return localStorage.getItem(LS_ENABLED) === 'true';
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  /** Returns true if the browser supports WebGPU */
+  function checkWebGPUSupport() {
+    return !!navigator.gpu;
+  }
+
+  /** Returns true if modelId is in the cached list */
+  function isModelDownloaded(modelId) {
+    return _getCached().includes(modelId);
+  }
+
+  /** Returns array of cached model ids */
+  function getCachedModels() {
+    return _getCached();
+  }
+
+  /** Persist enabled flag and update UI */
+  function setFallbackEnabled(enabled) {
+    localStorage.setItem(LS_ENABLED, enabled ? 'true' : 'false');
+    _refreshSettingsUI();
+  }
+
+  /** Persist selected model and update UI */
+  function setSelectedModel(modelId) {
+    localStorage.setItem(LS_MODEL, modelId);
+    _refreshSettingsUI();
+  }
+
+  /** Returns formatted size string for a model id */
+  function estimateModelSize(modelId) {
+    const m = MODELS.find(x => x.id === modelId);
+    return m ? m.size : 'Unknown';
+  }
+
+  /**
+   * Download the currently selected model with progress updates.
+   * Marks it as cached in localStorage when done.
+   */
+  async function downloadSelected() {
+    if (!checkWebGPUSupport()) {
+      toast('WebGPU not available in this browser', 'er');
+      return;
+    }
+    if (_downloading) return;
+
+    const modelId = _getSelected();
+    if (isModelDownloaded(modelId)) {
+      toast('Model already downloaded', 'ok');
+      _refreshSettingsUI();
+      return;
+    }
+
+    _downloading = true;
+    _setStatus('loading', 'Downloading… 0%');
+    _showProgress(true);
+
+    try {
+      const webllm = window.WebLLM;
+      if (!webllm) throw new Error('WebLLM library not loaded yet. Wait a moment and try again.');
+
+      // Create a fresh engine for downloading
+      _engine = new webllm.MLCEngine();
+
+      await _engine.reload(modelId, {
+        initProgressCallback: (report) => {
+          const pct = Math.round((report.progress || 0) * 100);
+          _updateProgress(pct, report.text || `${pct}%`);
+        }
+      });
+
+      _loadedModel = modelId;
+      const cached = _getCached();
+      if (!cached.includes(modelId)) cached.push(modelId);
+      _setCached(cached);
+
+      _setStatus('ready', 'Ready to use');
+      toast(`${MODELS.find(m=>m.id===modelId)?.label || modelId} downloaded ✓`, 'ok');
+    } catch (err) {
+      console.error('[LocalModel] Download failed:', err);
+      _setStatus('error', `Error: ${err.message || err}`);
+      toast('Download failed — see console for details', 'er');
+      _engine = null;
+      _loadedModel = null;
+    } finally {
+      _downloading = false;
+      _showProgress(false);
+      _refreshSettingsUI();
+    }
+  }
+
+  /**
+   * Remove the selected model from the cached list.
+   * Note: actual browser cache (OPFS/IndexedDB) cleanup is handled by WebLLM internals;
+   * we just remove the tracking entry so Atlas won't try to use it.
+   */
+  async function deleteSelected() {
+    const modelId = _getSelected();
+    const cached = _getCached().filter(id => id !== modelId);
+    _setCached(cached);
+    if (_loadedModel === modelId) {
+      _engine = null;
+      _loadedModel = null;
+    }
+    _setStatus('none', 'Not downloaded');
+    _refreshSettingsUI();
+    toast('Model removed from cache list', 'ok');
+  }
+
+  /**
+   * Generate a response using the local model.
+   * @param {Array}    messages        OpenAI-format message array
+   * @param {Function} onToken         Called with each streamed text chunk
+   * @returns {Promise<string>}        Full response text
+   */
+  async function generateResponse(messages, onToken) {
+    const modelId = _getSelected();
+    if (!isModelDownloaded(modelId)) {
+      throw new Error('Local model not downloaded. Please download it in Settings → Local Model.');
+    }
+
+    const webllm = window.WebLLM;
+    if (!webllm) throw new Error('WebLLM library not available.');
+
+    // Load model into engine if not already loaded
+    if (!_engine || _loadedModel !== modelId) {
+      _setStatus('loading', 'Loading model…');
+      _engine = new webllm.MLCEngine();
+      await _engine.reload(modelId, {
+        initProgressCallback: (r) => {
+          const pct = Math.round((r.progress || 0) * 100);
+          if (typeof onToken === 'function') onToken(`\n*Loading model: ${pct}%…*\n`, true);
+        }
+      });
+      _loadedModel = modelId;
+      _setStatus('ready', 'Ready');
+    }
+
+    let fullText = '';
+    const stream = await _engine.chat.completions.create({
+      messages,
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 2048,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        fullText += delta;
+        if (typeof onToken === 'function') onToken(delta, false);
+      }
+    }
+
+    return fullText;
+  }
+
+  /**
+   * Returns true if local fallback should be used for this message.
+   * Conditions: enabled + no cloud keys configured + model downloaded.
+   */
+  function shouldUseFallback() {
+    if (!_isEnabled()) return false;
+    const hasCloud = !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localKey);
+    if (hasCloud) return false;
+    return isModelDownloaded(_getSelected());
+  }
+
+  /**
+   * Returns true if fallback is enabled but model isn't downloaded.
+   * Used to prompt download.
+   */
+  function fallbackEnabledButNotDownloaded() {
+    if (!_isEnabled()) return false;
+    const hasCloud = !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localKey);
+    if (hasCloud) return false;
+    return !isModelDownloaded(_getSelected());
+  }
+
+  // ── Settings UI helpers ────────────────────────────────────────────────────
+
+  function _setStatus(state, text) {
+    const dot  = document.getElementById('local-model-status-icon');
+    const span = document.getElementById('local-model-status-text');
+    if (!dot || !span) return;
+    dot.className = `lm-status-dot lm-status-${state}`;
+    span.textContent = text;
+  }
+
+  function _showProgress(visible) {
+    const wrap = document.getElementById('local-model-progress-wrap');
+    if (wrap) wrap.style.display = visible ? 'block' : 'none';
+  }
+
+  function _updateProgress(pct, label) {
+    const bar  = document.getElementById('local-model-progress-bar');
+    const txt  = document.getElementById('local-model-progress-text');
+    if (bar) bar.style.width = pct + '%';
+    if (txt) txt.textContent = label || pct + '%';
+  }
+
+  /** Sync all settings-panel elements to current state */
+  function _refreshSettingsUI() {
+    const enabled   = _isEnabled();
+    const modelId   = _getSelected();
+    const cached    = _getCached();
+    const downloaded = isModelDownloaded(modelId);
+
+    const toggle = document.getElementById('toggle-local-fallback');
+    if (toggle) toggle.checked = enabled;
+
+    const select = document.getElementById('local-model-select');
+    if (select) select.value = modelId;
+
+    const dlBtn  = document.getElementById('local-model-dl-btn');
+    const delBtn = document.getElementById('local-model-del-btn');
+
+    if (dlBtn)  dlBtn.style.display  = downloaded ? 'none'   : 'inline-block';
+    if (delBtn) delBtn.style.display = downloaded ? 'inline-block' : 'none';
+
+    if (!_downloading) {
+      if (downloaded) {
+        _setStatus('ready', 'Ready — ' + estimateModelSize(modelId));
+      } else {
+        _setStatus('none', 'Not downloaded — ' + estimateModelSize(modelId));
+      }
+    }
+
+    // Cached list chips
+    const cacheWrap = document.getElementById('local-model-cached-wrap');
+    const cacheList = document.getElementById('local-model-cached-list');
+    if (cacheWrap && cacheList) {
+      cacheWrap.style.display = cached.length ? 'block' : 'none';
+      cacheList.innerHTML = cached.map(id => {
+        const m = MODELS.find(x => x.id === id);
+        const label = m ? m.label : id.split('-')[0];
+        const active = id === modelId;
+        return `<span class="lm-cached-chip${active ? ' active-chip' : ''}">✓ ${label}</span>`;
+      }).join('');
+    }
+
+    // WebGPU warning
+    const warn = document.getElementById('webgpu-warning');
+    if (warn) warn.style.display = checkWebGPUSupport() ? 'none' : 'block';
+  }
+
+  /** Called from openSettings() to sync UI on open */
+  function initSettingsUI() {
+    _refreshSettingsUI();
+  }
+
+  // ── Topbar indicator ───────────────────────────────────────────────────────
+
+  function showLocalModelIndicator(show) {
+    let el = document.getElementById('local-model-indicator');
+    if (!el) {
+      // Dynamically insert into topbar next to cost tracker
+      el = document.createElement('div');
+      el.id = 'local-model-indicator';
+      el.innerHTML = '🖥️ Local model';
+      const costTracker = document.getElementById('cost-tracker');
+      if (costTracker) costTracker.parentNode.insertBefore(el, costTracker.nextSibling);
+    }
+    el.classList.toggle('show', !!show);
+  }
+
+  // Return public interface
+  return {
+    checkWebGPUSupport,
+    isModelDownloaded,
+    getCachedModels,
+    setFallbackEnabled,
+    setSelectedModel,
+    estimateModelSize,
+    downloadSelected,
+    deleteSelected,
+    generateResponse,
+    shouldUseFallback,
+    fallbackEnabledButNotDownloaded,
+    initSettingsUI,
+    showLocalModelIndicator,
+  };
+})();
+// ── END LocalModelManager ──────────────────────────────────────────────────
