@@ -10116,6 +10116,63 @@ const LocalModelManager = (() => {
    * Download the currently selected model with progress updates.
    * Marks it as cached in localStorage when done.
    */
+  /**
+   * Resolve the WebLLM module.
+   * The ESM dynamic import stores it on window.webllm (lowercase).
+   * Fall back to window.WebLLM for any legacy setup.
+   */
+  function _getWebLLM() {
+    return window.webllm || window.WebLLM || null;
+  }
+
+  /**
+   * Returns a Promise that resolves with the WebLLM module.
+   * If already loaded, resolves immediately.
+   * If not loaded yet, waits for the webllm-ready event (max 30s).
+   */
+  function _waitForWebLLM(timeoutMs = 30000) {
+    const existing = _getWebLLM();
+    if (existing) return Promise.resolve(existing);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener('webllm-ready', handler);
+        reject(new Error('WebLLM took too long to load. Check your internet connection and reload the page.'));
+      }, timeoutMs);
+      function handler(e) {
+        clearTimeout(timer);
+        window.removeEventListener('webllm-ready', handler);
+        if (e.detail) resolve(e.detail);
+        else reject(new Error('WebLLM failed to load. Check console for details.'));
+      }
+      window.addEventListener('webllm-ready', handler);
+    });
+  }
+
+  /** Parse progress from a WebLLM v0.2.x InitProgressReport.
+   *  During network download: report.progress is 0, text is like "Fetching param cache[2/123]..."
+   *  During model init:       report.progress is 0..1
+   *  We extract % from the text when progress is 0 and text contains a fraction.
+   */
+  function _parseProgress(report) {
+    // Direct 0-1 float — model initialisation phase
+    if (report.progress && report.progress > 0) {
+      return { pct: Math.min(99, Math.round(report.progress * 100)), label: report.text || '' };
+    }
+    // Try to extract "N/M" fraction from the text (download phase)
+    // e.g. "Fetching param cache[23/158]: 14.56 MB fetched. 4.84 MB/s"
+    const fracMatch = report.text && report.text.match(/\[(\d+)\/(\d+)\]/);
+    if (fracMatch) {
+      const pct = Math.min(99, Math.round((parseInt(fracMatch[1]) / parseInt(fracMatch[2])) * 100));
+      return { pct, label: report.text };
+    }
+    // Percentage directly in text e.g. "Loading 45%"
+    const pctMatch = report.text && report.text.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (pctMatch) {
+      return { pct: Math.min(99, Math.round(parseFloat(pctMatch[1]))), label: report.text };
+    }
+    return { pct: 0, label: report.text || 'Starting…' };
+  }
+
   async function downloadSelected() {
     if (!checkWebGPUSupport()) {
       toast('WebGPU not available in this browser', 'er');
@@ -10131,34 +10188,57 @@ const LocalModelManager = (() => {
     }
 
     _downloading = true;
-    _setStatus('loading', 'Downloading… 0%');
+    _setStatus('loading', 'Loading WebLLM…');
     _showProgress(true);
+    _updateProgress(0, 'Initialising…');
+
+    let webllm;
+    try {
+      webllm = await _waitForWebLLM();
+    } catch (e) {
+      _downloading = false;
+      _showProgress(false);
+      _setStatus('error', e.message);
+      toast(e.message, 'er');
+      return;
+    }
 
     try {
-      const webllm = window.WebLLM;
-      if (!webllm) throw new Error('WebLLM library not loaded yet. Wait a moment and try again.');
+      // Destroy any stale engine first
+      if (_engine) {
+        try { await _engine.unload(); } catch {}
+        _engine = null;
+        _loadedModel = null;
+      }
 
-      // Create a fresh engine for downloading
       _engine = new webllm.MLCEngine();
 
-      await _engine.reload(modelId, {
-        initProgressCallback: (report) => {
-          const pct = Math.round((report.progress || 0) * 100);
-          _updateProgress(pct, report.text || `${pct}%`);
-        }
+      // *** CRITICAL: set callback on the engine BEFORE calling reload ***
+      // In WebLLM 0.2.x, initProgressCallback must be set this way —
+      // passing it inside the config object to reload() is silently ignored.
+      _engine.setInitProgressCallback((report) => {
+        const { pct, label } = _parseProgress(report);
+        _updateProgress(pct, label || `${pct}%`);
+        _setStatus('loading', `Downloading… ${pct}%`);
       });
+
+      // reload() triggers the full download + cache + model-init pipeline
+      await _engine.reload(modelId);
 
       _loadedModel = modelId;
       const cached = _getCached();
       if (!cached.includes(modelId)) cached.push(modelId);
       _setCached(cached);
 
+      _updateProgress(100, 'Complete ✓');
       _setStatus('ready', 'Ready to use');
       toast(`${MODELS.find(m=>m.id===modelId)?.label || modelId} downloaded ✓`, 'ok');
     } catch (err) {
       console.error('[LocalModel] Download failed:', err);
-      _setStatus('error', `Error: ${err.message || err}`);
+      const msg = err?.message || String(err);
+      _setStatus('error', `Error: ${msg}`);
       toast('Download failed — see console for details', 'er');
+      if (_engine) { try { await _engine.unload(); } catch {} }
       _engine = null;
       _loadedModel = null;
     } finally {
@@ -10198,19 +10278,19 @@ const LocalModelManager = (() => {
       throw new Error('Local model not downloaded. Please download it in Settings → Local Model.');
     }
 
-    const webllm = window.WebLLM;
-    if (!webllm) throw new Error('WebLLM library not available.');
+    const webllm = await _waitForWebLLM();
 
     // Load model into engine if not already loaded
     if (!_engine || _loadedModel !== modelId) {
       _setStatus('loading', 'Loading model…');
+      if (_engine) { try { await _engine.unload(); } catch {} }
       _engine = new webllm.MLCEngine();
-      await _engine.reload(modelId, {
-        initProgressCallback: (r) => {
-          const pct = Math.round((r.progress || 0) * 100);
-          if (typeof onToken === 'function') onToken(`\n*Loading model: ${pct}%…*\n`, true);
-        }
+      // Set callback before reload — required in WebLLM 0.2.x
+      _engine.setInitProgressCallback((r) => {
+        const { pct } = _parseProgress(r);
+        if (typeof onToken === 'function') onToken('__STATUS__Loading: ' + pct + '%', true);
       });
+      await _engine.reload(modelId);
       _loadedModel = modelId;
       _setStatus('ready', 'Ready');
     }
@@ -10326,6 +10406,24 @@ const LocalModelManager = (() => {
   /** Called from openSettings() to sync UI on open */
   function initSettingsUI() {
     _refreshSettingsUI();
+    // Check if WebLLM library is loaded; disable download button if not yet ready
+    const dlBtn = document.getElementById('local-model-dl-btn');
+    if (!dlBtn) return;
+    if (_getWebLLM()) {
+      dlBtn.disabled = false;
+      dlBtn.title = '';
+    } else {
+      dlBtn.disabled = true;
+      dlBtn.title = 'WebLLM library still loading…';
+      _setStatus('loading', 'Loading WebLLM library…');
+      // Enable as soon as the module is ready
+      window.addEventListener('webllm-ready', function handler(e) {
+        window.removeEventListener('webllm-ready', handler);
+        dlBtn.disabled = !e.detail;
+        dlBtn.title = e.detail ? '' : 'WebLLM failed to load';
+        _refreshSettingsUI();
+      });
+    }
   }
 
   // ── Topbar indicator ───────────────────────────────────────────────────────
