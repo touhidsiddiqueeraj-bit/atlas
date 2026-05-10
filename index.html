@@ -52,9 +52,22 @@
     <div id="conv-search-wrap"><input id="conv-search" placeholder="🔍 Search…" oninput="filterConvs(this.value)" autocomplete="off"></div>
     <div id="chatlist"></div>
     <div class="sb-ft">
-      <div class="akd" onclick="openKeyModal()">
+      <!-- [MODIFIED] Sidebar footer: Google sign-in or API key status -->
+      <div id="sb-google-signed-in" style="display:none;padding:8px 10px;border-radius:var(--rs);background:var(--surf);border:1px solid var(--bdr);margin-bottom:6px;cursor:pointer" onclick="openSettings()" title="Google account — click to open settings">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="sb-google-avatar-wrap" style="width:26px;height:26px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex-shrink:0;overflow:hidden">
+            <span id="sb-google-avatar-initial">G</span>
+            <img id="sb-google-avatar-img" style="display:none;width:26px;height:26px;border-radius:50%;object-fit:cover">
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:var(--tx1);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="sb-google-name">Google Account</div>
+            <div style="font-size:10px;color:var(--grn)">☁ Chats saved to Drive</div>
+          </div>
+        </div>
+      </div>
+      <div class="akd" id="akd-area" onclick="_akdClick()">
         <div class="akdot off" id="key-dot"></div>
-        <div class="akt" id="key-text">Click to add API key</div>
+        <div class="akt" id="key-text">Sign in or add API key</div>
       </div>
     </div>
   </div>
@@ -483,58 +496,6 @@
 
 <input type="file" id="file-input" multiple accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.html,.css,.json,.csv,.xml,.pdf,.png,.jpg,.jpeg,.gif,.webp" onchange="attachFiles(this.files)">
 
-<!-- API KEY MODAL -->
-<div class="modal-overlay" id="key-modal">
-  <div class="modal">
-    <div class="modal-title">Connect API</div>
-    <!-- Provider toggle -->
-    <div style="display:flex;gap:6px;margin-bottom:16px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);padding:4px">
-      <button id="prov-btn-openrouter" onclick="switchProvider('openrouter')"
-        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:var(--acc);color:#fff">
-        OpenRouter
-      </button>
-      <button id="prov-btn-deepseek" onclick="switchProvider('deepseek')"
-        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
-        DeepSeek
-      </button>
-      <button id="prov-btn-gemini" onclick="switchProvider('gemini')"
-        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
-        Gemini
-      </button>
-      <button id="prov-btn-openai" onclick="switchProvider('openai')"
-        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
-        OpenAI
-      </button>
-      <button id="prov-btn-local" onclick="switchProvider('local')"
-        style="flex:1;padding:7px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--tx2)">
-        Local
-      </button>
-    </div>
-    <div id="prov-desc-openrouter" class="modal-desc">Paste your OpenRouter API key. Stored in memory only — never saved to disk or sent anywhere except OpenRouter.</div>
-    <div id="prov-desc-deepseek" class="modal-desc" style="display:none">Paste your DeepSeek API key. Stored in memory only — never saved to disk or sent anywhere except DeepSeek.</div>
-    <div id="prov-desc-gemini" class="modal-desc" style="display:none">Paste your Google AI (Gemini) API key. Get one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--acc)">aistudio.google.com</a>. Stored in memory only.</div>
-    <div id="prov-desc-openai" class="modal-desc" style="display:none">Paste your OpenAI API key. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--acc)">platform.openai.com</a>. Stored in memory only.</div>
-    <div id="prov-desc-local" class="modal-desc" style="display:none">Connect to a locally hosted AI server (Ollama, LM Studio, llama.cpp, etc.). Uses the OpenAI-compatible <code style="font-family:'DM Mono',monospace;color:var(--acc)">/v1/chat/completions</code> API. API key is optional.</div>
-    <!-- Local provider extra fields (shown only when Local is active) -->
-    <div id="local-url-wrap" style="display:none">
-      <div class="modal-label">Server URL</div>
-      <input type="text" class="modal-input" id="local-url-input" placeholder="http://localhost:11434" autocomplete="off" style="font-family:'DM Mono',monospace">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:-8px;margin-bottom:10px">
-        <button onclick="document.getElementById('local-url-input').value='http://localhost:11434'" style="padding:3px 9px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:11px;color:var(--tx2);cursor:pointer">Ollama :11434</button>
-        <button onclick="document.getElementById('local-url-input').value='http://localhost:1234'" style="padding:3px 9px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:11px;color:var(--tx2);cursor:pointer">LM Studio :1234</button>
-        <button onclick="document.getElementById('local-url-input').value='http://localhost:8080'" style="padding:3px 9px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:11px;color:var(--tx2);cursor:pointer">llama.cpp :8080</button>
-      </div>
-    </div>
-    <div class="modal-label" id="api-key-label">API Key</div>
-    <input type="password" class="modal-input" id="api-key-input" placeholder="sk-or-v1-…" autocomplete="off">
-    <div id="key-err" style="color:var(--red);font-size:12px;margin-top:-8px;margin-bottom:12px;display:none"></div>
-    <div class="modal-actions">
-      <button class="modal-btn secondary" onclick="closeKeyModal()">Cancel</button>
-      <button class="modal-btn primary" id="key-connect-btn" onclick="saveKey()">Connect</button>
-    </div>
-  </div>
-</div>
-
 <!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settings-modal">
   <div class="modal wide">
@@ -668,8 +629,6 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="modal-btn secondary" onclick="exportAllData()" style="font-size:11px;padding:6px 12px">⬇ Export chats</button>
         <button class="modal-btn secondary" onclick="document.getElementById('import-file-input').click()" style="font-size:11px;padding:6px 12px">⬆ Import chats</button>
-        <button class="modal-btn secondary" id="gdrive-backup-btn" onclick="backupToDrive()" style="font-size:11px;padding:6px 12px;display:none">☁ Backup to Drive</button>
-        <button class="modal-btn secondary" id="gdrive-restore-btn" onclick="restoreFromDrive()" style="font-size:11px;padding:6px 12px;display:none">☁ Restore from Drive</button>
         <button class="modal-btn secondary" onclick="clearAllDataConfirm()" style="font-size:11px;padding:6px 12px;color:var(--red)">🗑 Clear all data</button>
       </div>
       <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllData(this)">
@@ -724,30 +683,58 @@
       <textarea id="donts-input" style="width:100%;min-height:88px;padding:9px 12px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--tx1);font-size:clamp(12px,1.5vw,13px);font-family:'DM Mono',monospace;outline:none;resize:vertical;transition:border-color .15s;line-height:1.55" placeholder="e.g. Don't add unnecessary caveats&#10;Don't use bullet points&#10;Don't be overly verbose" oninput="this.style.borderColor='var(--acc2)'" onblur="this.style.borderColor='var(--bdr)'"></textarea>
     </div>
     <div class="divider"></div>
-    <div class="settings-group" id="google-connectors-section">
-      <div class="modal-label">Google Connectors</div>
-      <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;line-height:1.55">Sign in with Google to let the AI use Gmail, Calendar, and Drive. The model will ask for confirmation before any action is taken.</div>
+    <!-- [MODIFIED] Google Sign-In — for chat history sync only -->
+    <div class="settings-group" id="google-signin-section">
+      <div class="modal-label">Google Account</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;line-height:1.55">Sign in with Google to automatically save and sync your chat history to Google Drive. Chats are stored in your personal Drive as a private file.</div>
       <button class="gconn-btn" id="gconn-signin-btn" onclick="googleSignIn()">
-        <div class="gconn-avatar-placeholder">
+        <div class="gconn-avatar-placeholder" id="gconn-avatar-placeholder">
           <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.566 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
         </div>
         <div class="gconn-info">
           <div class="gconn-name" id="gconn-name-label">Sign in with Google</div>
-          <div class="gconn-email" id="gconn-email-label">Connect Gmail, Calendar & Drive</div>
+          <div class="gconn-email" id="gconn-email-label">Sync chat history to Drive</div>
         </div>
-        <span class="gconn-status off" id="gconn-status-badge">Not connected</span>
+        <span class="gconn-status off" id="gconn-status-badge">Not signed in</span>
       </button>
-      <div class="gconn-scopes" id="gconn-scopes" style="display:none">
-        <div class="gconn-scope" id="scope-gmail">📧 Gmail</div>
-        <div class="gconn-scope" id="scope-calendar">📅 Calendar</div>
-        <div class="gconn-scope" id="scope-drive">📁 Drive</div>
+      <div id="gconn-signout-wrap" style="display:none;margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="modal-btn secondary" onclick="gDriveSyncNow()" style="font-size:11px;padding:6px 12px">☁ Sync now</button>
+        <button class="modal-btn secondary" onclick="googleSignOut()" style="font-size:11px;padding:6px 12px;color:var(--red)">🔌 Sign out</button>
       </div>
-      <div id="gconn-signout-wrap" style="display:none;margin-top:10px">
-        <button class="modal-btn secondary" onclick="googleSignOut()" style="font-size:11px;padding:6px 12px;color:var(--red)">🔌 Disconnect Google</button>
+      <div id="gconn-sync-status" style="display:none;margin-top:8px;font-size:10px;color:var(--tx3)"></div>
+    </div>
+    <!-- [MODIFIED] Inline API Key Entry in Settings (replaces popup) -->
+    <div class="divider"></div>
+    <div class="settings-group" id="api-key-section">
+      <div class="modal-label">API Keys</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;line-height:1.55">Keys are stored securely in the browser and never sent anywhere except the respective AI provider.</div>
+      <!-- Provider tabs -->
+      <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">
+        <button id="aks-btn-openrouter" onclick="aksSwitch('openrouter',this)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);color:#fff">OpenRouter</button>
+        <button id="aks-btn-deepseek"   onclick="aksSwitch('deepseek',this)"   style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">DeepSeek</button>
+        <button id="aks-btn-gemini"     onclick="aksSwitch('gemini',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Gemini</button>
+        <button id="aks-btn-openai"     onclick="aksSwitch('openai',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">OpenAI</button>
+        <button id="aks-btn-local"      onclick="aksSwitch('local',this)"      style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Local</button>
       </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:10px;line-height:1.55;padding:8px 10px;background:var(--surf);border-radius:var(--rx);border:1px solid var(--bdr)">
-        ℹ Only tool-capable models can use connectors. Your Google OAuth Client ID is pre-configured.
+      <!-- Key input area -->
+      <div id="aks-local-url-wrap" style="display:none;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Server URL</div>
+        <input type="text" id="aks-local-url" placeholder="http://localhost:11434" style="width:100%;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Mono',monospace;outline:none;box-sizing:border-box">
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">
+          <button onclick="document.getElementById('aks-local-url').value='http://localhost:11434'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">Ollama :11434</button>
+          <button onclick="document.getElementById('aks-local-url').value='http://localhost:1234'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">LM Studio :1234</button>
+          <button onclick="document.getElementById('aks-local-url').value='http://localhost:8080'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">llama.cpp :8080</button>
+        </div>
       </div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:4px" id="aks-key-label">API Key</div>
+      <div id="aks-desc" style="font-size:10px;color:var(--tx3);margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="password" id="aks-key-input" placeholder="Paste key here…" autocomplete="off" style="flex:1;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Mono',monospace;outline:none">
+        <button class="modal-btn primary" onclick="aksSaveKey()" style="font-size:12px;padding:7px 14px;flex-shrink:0">Connect</button>
+        <button class="modal-btn secondary" id="aks-clear-btn" onclick="aksClearKey()" style="font-size:12px;padding:7px 10px;flex-shrink:0;color:var(--red)">✕</button>
+      </div>
+      <div id="aks-err" style="color:var(--red);font-size:11px;margin-top:6px;display:none"></div>
+      <div id="aks-ok" style="color:var(--grn);font-size:11px;margin-top:6px;display:none"></div>
     </div>
     <div class="divider"></div>
     <!-- [NEW] Local Model Fallback section -->
