@@ -139,7 +139,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (S.cfg.fontSize && S.cfg.fontSize !== 14) previewFontSize(S.cfg.fontSize);
     if (S.cfg.chatDensity != null) previewChatDensity(S.cfg.chatDensity);
     const hasKey = !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey);
-    if (hasKey) reloadModels(); else openKeyModal();
+    if (hasKey) reloadModels(); // No popup on load — users open Settings or use local model
     initToolDefinitions();
   });
 });
@@ -1916,14 +1916,14 @@ function renderToolCall(toolCall, result, status) {
 
 // ── API KEY ────────────────────────────────────────────────────────────────
 function openKeyModal() {
-  // Sync toggle UI to current provider
-  switchProvider(S.provider || 'openrouter', /*silent=*/true);
-  document.getElementById('key-modal').classList.add('open');
+  // [MODIFIED] No popup — open Settings directly and scroll to API keys section
+  openSettings();
+  setTimeout(() => {
+    const el = document.getElementById('api-key-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
 }
-function closeKeyModal() {
-  document.getElementById('key-modal').classList.remove('open');
-  document.getElementById('key-err').style.display = 'none';
-}
+function closeKeyModal() { /* no-op — modal removed */ }
 
 function switchProvider(prov, silent) {
   // Save current model for current provider before switching
@@ -2676,7 +2676,9 @@ function newChat() {
   document.getElementById('app').classList.remove('mnav-open');
   renderChatList(); renderMessages();
   // [CHANGED] Save new conv to IndexedDB (not localStorage)
-  ChatStorage.saveConversation(newConv).catch(e => console.warn('Atlas: newChat save failed', e));
+  ChatStorage.saveConversation(newConv)
+    .then(() => { if (typeof _scheduleSync === 'function') _scheduleSync(); })
+    .catch(e => console.warn('Atlas: newChat save failed', e));
   persist();
 }
 
@@ -4970,6 +4972,8 @@ async function autoSaveConversation() {
   try {
     await ChatStorage.saveConversation(c);
     showSavedIndicator();
+    // [NEW] Auto-sync to Google Drive (debounced, fires 3s after last change)
+    if (typeof _scheduleSync === 'function') _scheduleSync();
   } catch(e) {
     console.warn('Atlas: auto-save failed', e);
   }
@@ -5044,10 +5048,13 @@ function persist() {
         accessToken: S.google?.accessToken || null,
         tokenExpiry: S.google?.tokenExpiry || 0,
         user: S.google?.user || null,
+        _lastSync: S.google?._lastSync || null,  // [NEW] last Drive sync timestamp
       },
       sbOpen: S.sbOpen,
     };
     SafeStorage.set(STORAGE_KEY, JSON.stringify(data));
+    // [NEW] Auto-sync to Drive whenever state is persisted (debounced)
+    if (typeof _scheduleSync === 'function') _scheduleSync();
   } catch(e) {
     console.warn('Atlas: persist failed', e);
   }
@@ -5469,13 +5476,13 @@ async function initSecureStorage() {
   updateKeyUI();
   updateSecurityStatus(keySource);
 
-  // 8. If no key available at all, show the key modal
+  // 8. Load models if key is present; update sidebar footer
   const hasKey = S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl;
-  if (!hasKey) {
-    setTimeout(openKeyModal, 600);
-  } else {
+  if (hasKey) {
     setTimeout(reloadModels, 100);
   }
+  // [MODIFIED] Update sidebar footer to reflect key/Google state
+  _updateSidebarFooter();
 }
 
 async function reloadModels() {
@@ -5577,8 +5584,8 @@ async function reloadModels() {
       }
       S.key = '';
       document.getElementById('key-dot').classList.add('off');
-      document.getElementById('key-text').textContent = 'Key expired — click to reconnect';
-      openKeyModal();
+      document.getElementById('key-text').textContent = 'Key expired — open Settings to reconnect';
+      // [MODIFIED] No auto-popup on expiry
       return;
     }
     const data = await res.json();
@@ -5664,6 +5671,10 @@ function openSettings() {
   
   // [NEW] Sync local model settings UI
   LocalModelManager.initSettingsUI();
+  // [NEW] Sync inline API key section
+  if (typeof aksInit === 'function') aksInit();
+  // [NEW] Sync Google sign-in UI
+  if (typeof _gUpdateUI === 'function') _gUpdateUI();
 
   const gfn = document.getElementById('gemini-free-note');
   if (gfn) gfn.style.display = 'none'; // removed per design
@@ -9541,10 +9552,9 @@ S.google = {
   scopes: [],
 };
 
+// [MODIFIED] Drive + profile only — no Gmail/Calendar access
 const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.modify',
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',  // access to files created by Atlas only
   'email', 'profile',
 ];
 
@@ -9595,8 +9605,10 @@ function googleSignIn() {
           await _gFetchUserInfo();
           _gUpdateUI();
           _gPersist();
-          initToolDefinitions(); // re-register tools with google tools now active
-          toast('Google connected ✓', 'ok');
+          // [MODIFIED] No tool registration — Google is only used for chat history sync
+          // Attempt to restore chat history from Drive on sign-in
+          toast('Google signed in — loading your chat history…', 'ok');
+          await _restoreChatsFromDrive();
         } else {
           toast('Google sign-in cancelled or failed', 'er');
         }
@@ -9624,30 +9636,33 @@ function googleSignOut() {
   S.google.tokenExpiry = 0;
   S.google.user = null;
   S.google.scopes = [];
+  S.google._lastSync = null;
   _gUpdateUI();
   _gPersist();
-  initToolDefinitions();
-  toast('Google disconnected', 'ok');
+  // [MODIFIED] No tool re-registration needed
+  toast('Signed out of Google', 'ok');
 }
 
+// [MODIFIED] _gUpdateUI — scoped to chat-history-only Google sign-in
 function _gUpdateUI() {
   const connected = _gTokenValid() && S.google.user;
-  const btn = document.getElementById('gconn-signin-btn');
-  const badge = document.getElementById('gconn-status-badge');
+  const btn       = document.getElementById('gconn-signin-btn');
+  const badge     = document.getElementById('gconn-status-badge');
   const nameLabel = document.getElementById('gconn-name-label');
-  const emailLabel = document.getElementById('gconn-email-label');
-  const scopes = document.getElementById('gconn-scopes');
-  const signout = document.getElementById('gconn-signout-wrap');
+  const emailLabel= document.getElementById('gconn-email-label');
+  const userWrap  = document.getElementById('gconn-user-wrap');
+  const signout   = document.getElementById('gconn-signout-wrap');
 
   if (!btn) return;
+
   if (connected) {
     btn.classList.add('connected');
-    badge.textContent = 'Connected'; badge.className = 'gconn-status on';
+    badge.textContent = 'Signed in'; badge.className = 'gconn-status on';
     nameLabel.textContent = S.google.user.name;
     emailLabel.textContent = S.google.user.email;
     // Show avatar
     const placeholder = btn.querySelector('.gconn-avatar-placeholder');
-    if (S.google.user.picture && placeholder) {
+    if (S.google.user.picture && placeholder && !btn.querySelector('.gconn-avatar')) {
       const img = document.createElement('img');
       img.className = 'gconn-avatar';
       img.src = S.google.user.picture;
@@ -9655,21 +9670,37 @@ function _gUpdateUI() {
       placeholder.style.display = 'none';
       btn.insertBefore(img, placeholder);
     }
-    if (scopes) {
-      scopes.style.display = 'flex';
-      ['gmail','calendar','drive'].forEach(s => {
-        const el = document.getElementById('scope-' + s);
-        if (el) el.className = 'gconn-scope active';
-      });
-    }
-    if (signout) signout.style.display = 'block';
+    if (userWrap) userWrap.style.display = 'block';
+    if (signout)  signout.style.display  = 'block';
+    _gUpdateSyncLabel();
   } else {
     btn.classList.remove('connected');
-    badge.textContent = 'Not connected'; badge.className = 'gconn-status off';
-    nameLabel.textContent = 'Sign in with Google';
-    emailLabel.textContent = 'Connect Gmail, Calendar & Drive';
-    if (scopes) scopes.style.display = 'none';
-    if (signout) signout.style.display = 'none';
+    // Remove avatar if present
+    const oldImg = btn.querySelector('.gconn-avatar');
+    const ph = btn.querySelector('.gconn-avatar-placeholder');
+    if (oldImg) oldImg.remove();
+    if (ph) ph.style.display = 'flex';
+    badge.textContent = 'Not signed in'; badge.className = 'gconn-status off';
+    nameLabel.textContent  = 'Sign in with Google';
+    emailLabel.textContent = 'Sync chat history to Drive';
+    if (userWrap) userWrap.style.display = 'none';
+    if (signout)  signout.style.display  = 'none';
+  }
+  // [NEW] Keep sidebar footer in sync
+  _updateSidebarFooter();
+}
+
+function _gUpdateSyncLabel() {
+  const el = document.getElementById('gconn-last-sync');
+  const statusEl = document.getElementById('gconn-sync-status');
+  if (!el) return;
+  const ts = S.google._lastSync;
+  if (ts) {
+    el.textContent = 'Last synced: ' + new Date(ts).toLocaleString();
+    if (statusEl) { statusEl.textContent = '☁ Synced'; statusEl.style.color = 'var(--grn)'; }
+  } else {
+    el.textContent = 'Last synced: never';
+    if (statusEl) { statusEl.textContent = '☁ Not yet synced'; statusEl.style.color = 'var(--tx3)'; }
   }
 }
 
@@ -9693,8 +9724,9 @@ function _requireToolConfirm(toolName, prettyName, description, payload) {
 }
 
 // ── GOOGLE API HELPERS ─────────────────────────────────────────────────────
+// [MODIFIED] _gApi is kept for Drive file operations (chat sync) only
 async function _gApi(method, url, body) {
-  if (!_gTokenValid()) throw new Error('Google token expired. Reconnect in Settings.');
+  if (!_gTokenValid()) throw new Error('Google token expired. Please sign in again in Settings.');
   const opts = {
     method,
     headers: { Authorization: 'Bearer ' + S.google.accessToken, 'Content-Type': 'application/json' },
@@ -9707,237 +9739,52 @@ async function _gApi(method, url, body) {
   return json;
 }
 
-// ── TOOL EXECUTORS ─────────────────────────────────────────────────────────
-const GOOGLE_TOOLS = {
-  // ── Gmail ──────────────────────────────────────────────────────────
-  async gmail_list_messages({ query = '', maxResults = 5, labelIds = [] }) {
-    const params = new URLSearchParams({ maxResults, q: query });
-    if (labelIds.length) params.set('labelIds', labelIds.join(','));
-    const data = await _gApi('GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`);
-    if (!data.messages?.length) return { messages: [], total: 0 };
-    // Fetch snippets in parallel (up to 5)
-    const details = await Promise.all(
-      data.messages.slice(0, 5).map(m =>
-        _gApi('GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`)
-      )
-    );
-    return {
-      messages: details.map(m => ({
-        id: m.id,
-        snippet: m.snippet,
-        subject: m.payload?.headers?.find(h => h.name === 'Subject')?.value || '',
-        from: m.payload?.headers?.find(h => h.name === 'From')?.value || '',
-        date: m.payload?.headers?.find(h => h.name === 'Date')?.value || '',
-        unread: m.labelIds?.includes('UNREAD'),
-      })),
-      total: data.resultSizeEstimate || details.length,
-    };
-  },
-
-  async gmail_get_message({ messageId }) {
-    const m = await _gApi('GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`);
-    const headers = m.payload?.headers || [];
-    const get = name => headers.find(h => h.name === name)?.value || '';
-    // Extract body text
-    function extractBody(part) {
-      if (!part) return '';
-      if (part.mimeType === 'text/plain' && part.body?.data)
-        return atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
-      if (part.parts) return part.parts.map(extractBody).filter(Boolean).join('\n');
-      return '';
-    }
-    return {
-      id: m.id, subject: get('Subject'), from: get('From'), to: get('To'),
-      date: get('Date'), body: extractBody(m.payload).slice(0, 3000),
-      snippet: m.snippet, labels: m.labelIds,
-    };
-  },
-
-  async gmail_send({ to, subject, body, replyToMessageId }) {
-    const allowed = await _requireToolConfirm('gmail_send', 'Send Email',
-      'The AI wants to send this email. Review carefully before allowing.', { to, subject, body: body?.slice(0, 300) });
-    if (!allowed) throw new Error('User denied: email send cancelled');
-    const raw = [`To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', body].join('\r\n');
-    const encoded = btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    const threadId = replyToMessageId ? (await _gApi('GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages/${replyToMessageId}?format=minimal`)).threadId : undefined;
-    const body2 = { raw: encoded };
-    if (threadId) body2.threadId = threadId;
-    const sent = await _gApi('POST', 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send', body2);
-    return { success: true, messageId: sent.id };
-  },
-
-  async gmail_draft({ to, subject, body }) {
-    const allowed = await _requireToolConfirm('gmail_draft', 'Create Email Draft',
-      'The AI wants to create an email draft.', { to, subject, body: body?.slice(0, 300) });
-    if (!allowed) throw new Error('User denied: draft creation cancelled');
-    const raw = [`To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', body].join('\r\n');
-    const encoded = btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    const draft = await _gApi('POST', 'https://gmail.googleapis.com/gmail/v1/users/me/drafts', { message: { raw: encoded } });
-    return { success: true, draftId: draft.id };
-  },
-
-  // ── Calendar ───────────────────────────────────────────────────────
-  async calendar_list_events({ timeMin, timeMax, maxResults = 10, query = '' }) {
-    const now = new Date();
-    const params = new URLSearchParams({
-      maxResults,
-      singleEvents: 'true',
-      orderBy: 'startTime',
-      timeMin: timeMin || now.toISOString(),
-      timeMax: timeMax || new Date(now.getTime() + 7 * 86400000).toISOString(),
-    });
-    if (query) params.set('q', query);
-    const data = await _gApi('GET', `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`);
-    return {
-      events: (data.items || []).map(e => ({
-        id: e.id, title: e.summary, start: e.start?.dateTime || e.start?.date,
-        end: e.end?.dateTime || e.end?.date, location: e.location, description: e.description,
-        status: e.status, attendees: e.attendees?.map(a => a.email),
-      })),
-    };
-  },
-
-  async calendar_create_event({ title, start, end, description, location, attendees }) {
-    const allowed = await _requireToolConfirm('calendar_create_event', 'Create Calendar Event',
-      'The AI wants to create a calendar event.', { title, start, end, description });
-    if (!allowed) throw new Error('User denied: event creation cancelled');
-    const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s);
-    const event = {
-      summary: title,
-      description, location,
-      start: isDate(start) ? { date: start } : { dateTime: start, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-      end: isDate(end) ? { date: end } : { dateTime: end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-    };
-    if (attendees?.length) event.attendees = attendees.map(e => ({ email: e }));
-    const created = await _gApi('POST', 'https://www.googleapis.com/calendar/v3/calendars/primary/events', event);
-    return { success: true, eventId: created.id, link: created.htmlLink };
-  },
-
-  async calendar_delete_event({ eventId }) {
-    const allowed = await _requireToolConfirm('calendar_delete_event', 'Delete Calendar Event',
-      'The AI wants to delete this calendar event.', { eventId });
-    if (!allowed) throw new Error('User denied: delete cancelled');
-    await _gApi('DELETE', `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`);
-    return { success: true };
-  },
-
-  // ── Drive ──────────────────────────────────────────────────────────
-  async drive_list_files({ query = '', maxResults = 10, folderId }) {
-    let q = query;
-    if (folderId) q = `'${folderId}' in parents` + (q ? ' and ' + q : '');
-    if (!q) q = 'trashed=false';
-    const params = new URLSearchParams({
-      pageSize: maxResults,
-      fields: 'files(id,name,mimeType,size,modifiedTime,webViewLink)',
-      q,
-    });
-    const data = await _gApi('GET', `https://www.googleapis.com/drive/v3/files?${params}`);
-    return { files: data.files || [] };
-  },
-
-  async drive_get_file_content({ fileId, maxChars = 3000 }) {
-    const meta = await _gApi('GET', `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType`);
-    let content = '';
-    if (meta.mimeType === 'application/vnd.google-apps.document') {
-      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`, {
-        headers: { Authorization: 'Bearer ' + S.google.accessToken }
-      });
-      content = (await r.text()).slice(0, maxChars);
-    } else if (meta.mimeType?.startsWith('text/')) {
-      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        headers: { Authorization: 'Bearer ' + S.google.accessToken }
-      });
-      content = (await r.text()).slice(0, maxChars);
-    } else {
-      content = `[Binary file: ${meta.mimeType}. Direct text extraction not supported.]`;
-    }
-    return { name: meta.name, mimeType: meta.mimeType, content };
-  },
-
-  async drive_create_file({ name, content, mimeType = 'text/plain', folderId }) {
-    const allowed = await _requireToolConfirm('drive_create_file', 'Create Drive File',
-      'The AI wants to create a file in your Google Drive.', { name, mimeType });
-    if (!allowed) throw new Error('User denied: file creation cancelled');
-    const metadata = { name, mimeType };
-    if (folderId) metadata.parents = [folderId];
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([content], { type: mimeType }));
-    const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + S.google.accessToken },
-      body: form,
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error?.message || 'Drive upload failed');
-    return { success: true, fileId: data.id, name: data.name, link: data.webViewLink };
-  },
-};
-
-// ── TOOL DEFINITIONS REGISTRY ─────────────────────────────────────────────
-function initToolDefinitions() {
-  const base = [];
-
-  // Only add Google tools if connected
-  if (_gTokenValid()) {
-    base.push(
-      // Gmail
-      { type:'function', function:{ name:'gmail_list_messages', description:'List emails from Gmail inbox. Use to find recent emails, search by sender/subject/content.', parameters:{ type:'object', properties:{ query:{type:'string',description:'Gmail search query, e.g. "from:alice@example.com is:unread"'}, maxResults:{type:'integer',description:'Max emails to return (1-10)',default:5} }, required:[] } } },
-      { type:'function', function:{ name:'gmail_get_message', description:'Get full content of a specific email by ID.', parameters:{ type:'object', properties:{ messageId:{type:'string',description:'Gmail message ID'} }, required:['messageId'] } } },
-      { type:'function', function:{ name:'gmail_send', description:'Send an email. ALWAYS show the full draft to the user and ask for confirmation before calling this.', parameters:{ type:'object', properties:{ to:{type:'string',description:'Recipient email'}, subject:{type:'string'}, body:{type:'string',description:'Plain text email body'}, replyToMessageId:{type:'string',description:'Optional: message ID to reply to'} }, required:['to','subject','body'] } } },
-      { type:'function', function:{ name:'gmail_draft', description:'Create a draft email (does not send).', parameters:{ type:'object', properties:{ to:{type:'string'}, subject:{type:'string'}, body:{type:'string'} }, required:['to','subject','body'] } } },
-      // Calendar
-      { type:'function', function:{ name:'calendar_list_events', description:'List upcoming Google Calendar events.', parameters:{ type:'object', properties:{ timeMin:{type:'string',description:'ISO 8601 start time filter'}, timeMax:{type:'string',description:'ISO 8601 end time filter'}, maxResults:{type:'integer',default:10}, query:{type:'string',description:'Text search in events'} }, required:[] } } },
-      { type:'function', function:{ name:'calendar_create_event', description:'Create a new Google Calendar event. Requires user confirmation.', parameters:{ type:'object', properties:{ title:{type:'string'}, start:{type:'string',description:'ISO 8601 datetime or YYYY-MM-DD'}, end:{type:'string',description:'ISO 8601 datetime or YYYY-MM-DD'}, description:{type:'string'}, location:{type:'string'}, attendees:{type:'array',items:{type:'string'},description:'List of attendee emails'} }, required:['title','start','end'] } } },
-      { type:'function', function:{ name:'calendar_delete_event', description:'Delete a calendar event by ID. Requires user confirmation.', parameters:{ type:'object', properties:{ eventId:{type:'string'} }, required:['eventId'] } } },
-      // Drive
-      { type:'function', function:{ name:'drive_list_files', description:'List files in Google Drive.', parameters:{ type:'object', properties:{ query:{type:'string',description:'Drive search query'}, maxResults:{type:'integer',default:10}, folderId:{type:'string',description:'Optional folder ID to list within'} }, required:[] } } },
-      { type:'function', function:{ name:'drive_get_file_content', description:'Read the text content of a Google Drive file.', parameters:{ type:'object', properties:{ fileId:{type:'string'}, maxChars:{type:'integer',default:3000} }, required:['fileId'] } } },
-      { type:'function', function:{ name:'drive_create_file', description:'Create a new file in Google Drive. Requires user confirmation.', parameters:{ type:'object', properties:{ name:{type:'string'}, content:{type:'string'}, mimeType:{type:'string',default:'text/plain'}, folderId:{type:'string'} }, required:['name','content'] } } }
-    );
-  }
-
-  S.toolDefinitions = base;
-}
-
 // ── TOOL CALL EXECUTOR ─────────────────────────────────────────────────────
+// [MODIFIED] Google tool execution removed — no Gmail/Calendar/Drive AI tools
 async function _executeGoogleTool(toolName, argsStr) {
-  let args;
-  try { args = JSON.parse(argsStr || '{}'); } catch { args = {}; }
-  const fn = GOOGLE_TOOLS[toolName];
-  if (!fn) return null; // not a Google tool
-  return await fn(args);
+  return null; // Google tools disabled
 }
 
-// ── GOOGLE DRIVE MEMORY BACKUP ─────────────────────────────────────────────
-const DRIVE_BACKUP_FILENAME = 'atlas-memory-backup.json';
+// ── CHAT HISTORY SYNC TO GOOGLE DRIVE ─────────────────────────────────────
+// Atlas stores chat history as a single JSON file in the user's Drive.
+// File is private to the app (drive.file scope).
+const DRIVE_CHAT_FILENAME = 'atlas-chat-history.json';
+let _driveSyncDebounce = null;
 
-async function backupToDrive() {
-  if (!_gTokenValid()) { toast('Connect Google first in Settings', 'er'); return; }
+/**
+ * Save all conversations to Google Drive.
+ * Called automatically after every conversation change when signed in.
+ */
+async function syncChatsToDrive(silent = false) {
+  if (!_gTokenValid()) return;
   try {
-    const raw = SafeStorage.get(STORAGE_KEY) || '{}';
-    const data = JSON.parse(raw);
-    // Strip access tokens from backup for security
-    if (data.google) { data.google.accessToken = null; data.google.tokenExpiry = 0; }
-    const json = JSON.stringify(data, null, 2);
+    const syncStatus = document.getElementById('gconn-sync-status');
+    if (syncStatus && !silent) { syncStatus.textContent = '↑ Syncing…'; syncStatus.style.color = 'var(--amb, #f5a623)'; }
 
-    // Check if backup file already exists
-    const search = await _gApi('GET', `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_BACKUP_FILENAME}' and trashed=false&fields=files(id,name)`);
+    // Load all conversations from IndexedDB
+    const convs = await ChatStorage.loadAllConversations();
+    const payload = {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      convs,
+    };
+    const json = JSON.stringify(payload);
+
+    // Find existing file
+    const search = await _gApi('GET',
+      `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_CHAT_FILENAME}' and trashed=false&fields=files(id,name)&spaces=drive`
+    );
     const existing = search.files?.[0];
 
     const form = new FormData();
-    const metadata = { name: DRIVE_BACKUP_FILENAME, mimeType: 'application/json' };
+    const metadata = { name: DRIVE_CHAT_FILENAME, mimeType: 'application/json' };
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([json], { type: 'application/json' }));
+    form.append('file',     new Blob([json],                      { type: 'application/json' }));
 
-    let url, method;
-    if (existing) {
-      url = `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=multipart`;
-      method = 'PATCH';
-    } else {
-      url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-      method = 'POST';
-    }
+    const url    = existing
+      ? `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=multipart`
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    const method = existing ? 'PATCH' : 'POST';
 
     const r = await fetch(url, {
       method,
@@ -9945,20 +9792,36 @@ async function backupToDrive() {
       body: form,
     });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'Upload failed'); }
-    const convCount = data.convs?.length || 0;
-    toast(`☁ Backed up ${convCount} conversation${convCount !== 1 ? 's' : ''} to Drive ✓`, 'ok');
+
+    S.google._lastSync = Date.now();
+    _gPersist();
+    _gUpdateSyncLabel();
+    if (!silent) toast(`☁ ${convs.length} conversation${convs.length !== 1 ? 's' : ''} synced to Drive ✓`, 'ok');
   } catch(e) {
-    toast('Backup failed: ' + e.message, 'er');
+    const syncStatus = document.getElementById('gconn-sync-status');
+    if (syncStatus) { syncStatus.textContent = '⚠ Sync failed'; syncStatus.style.color = 'var(--red)'; }
+    if (!silent) toast('Drive sync failed: ' + e.message, 'er');
+    console.warn('[Atlas] Drive sync failed:', e);
   }
 }
 
-async function restoreFromDrive() {
-  if (!_gTokenValid()) { toast('Connect Google first in Settings', 'er'); return; }
-  if (!confirm('Restore memory from Google Drive? This will replace your current local data.')) return;
+/**
+ * Restore conversations from Google Drive after sign-in.
+ * Merges Drive chats with any existing local ones (Drive wins on conflict by id).
+ */
+async function _restoreChatsFromDrive() {
+  if (!_gTokenValid()) return;
   try {
-    const search = await _gApi('GET', `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_BACKUP_FILENAME}' and trashed=false&fields=files(id,name,modifiedTime)`);
+    const search = await _gApi('GET',
+      `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_CHAT_FILENAME}' and trashed=false&fields=files(id,name,modifiedTime)&spaces=drive`
+    );
     const file = search.files?.[0];
-    if (!file) { toast('No backup found in Drive', 'er'); return; }
+    if (!file) {
+      // No backup yet — sync local data up to Drive
+      toast('Google signed in ✓ — no Drive backup found, syncing local chats now…', 'ok');
+      await syncChatsToDrive(true);
+      return;
+    }
 
     const r = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
       headers: { Authorization: 'Bearer ' + S.google.accessToken }
@@ -9966,32 +9829,54 @@ async function restoreFromDrive() {
     if (!r.ok) throw new Error('Download failed');
     const data = await r.json();
 
-    // Preserve current Google token
-    data.google = data.google || {};
-    data.google.accessToken = S.google.accessToken;
-    data.google.tokenExpiry = S.google.tokenExpiry;
-    data.google.user = S.google.user;
-    data.google.clientId = S.google.clientId;
+    if (data.convs && Array.isArray(data.convs)) {
+      // Merge: index existing by id, overwrite with Drive versions
+      const existing = await ChatStorage.loadAllConversations();
+      const byId = {};
+      existing.forEach(c => { byId[c.id] = c; });
+      data.convs.forEach(c => { byId[c.id] = c; });
+      const merged = Object.values(byId).sort((a, b) =>
+        (b.msgs?.[b.msgs.length-1]?.ts || 0) - (a.msgs?.[a.msgs.length-1]?.ts || 0)
+      );
 
-    SafeStorage.set(STORAGE_KEY, JSON.stringify(data));
-    const modDate = new Date(file.modifiedTime).toLocaleDateString();
-    toast(`☁ Restored from Drive backup (${modDate}) — reloading…`, 'ok');
-    setTimeout(() => location.reload(), 1500);
+      // Save all merged convs to IndexedDB
+      for (const conv of merged) {
+        await ChatStorage.saveConversation(conv);
+      }
+
+      // Reload the sidebar
+      if (typeof loadAllChats === 'function') loadAllChats();
+      else if (typeof renderChatList === 'function') renderChatList();
+
+      S.google._lastSync = Date.now();
+      _gPersist();
+      _gUpdateSyncLabel();
+
+      const modDate = new Date(file.modifiedTime).toLocaleDateString();
+      toast(`☁ ${merged.length} conversation${merged.length!==1?'s':''} restored from Drive (${modDate}) ✓`, 'ok');
+    }
   } catch(e) {
-    toast('Restore failed: ' + e.message, 'er');
+    console.warn('[Atlas] Drive restore failed:', e);
+    toast('Could not restore from Drive: ' + e.message, 'er');
   }
 }
 
-// Show/hide Drive backup buttons based on Google connection
-const _origGUpdateUI = _gUpdateUI;
-_gUpdateUI = function() {
-  _origGUpdateUI();
-  const connected = _gTokenValid() && S.google?.user;
-  const bb = document.getElementById('gdrive-backup-btn');
-  const rb = document.getElementById('gdrive-restore-btn');
-  if (bb) bb.style.display = connected ? '' : 'none';
-  if (rb) rb.style.display = connected ? '' : 'none';
-};
+/**
+ * Debounced auto-sync — called after every conversation save.
+ * Waits 3 seconds after the last change before uploading.
+ */
+function _scheduleSync() {
+  if (!_gTokenValid()) return;
+  clearTimeout(_driveSyncDebounce);
+  _driveSyncDebounce = setTimeout(() => syncChatsToDrive(true), 3000);
+}
+
+// Public aliases
+async function backupToDrive()    { return syncChatsToDrive(false); }
+async function restoreFromDrive() { return _restoreChatsFromDrive(); }
+// [NEW] Called from "Sync now" button in Settings
+async function gDriveSyncNow() { return syncChatsToDrive(false); }
+
 
 // ── GLOBAL SYSTEM PROMPT PRESETS ──────────────────────────────────────────
 
@@ -10476,3 +10361,237 @@ const LocalModelManager = (() => {
   };
 })();
 // ── END LocalModelManager ──────────────────────────────────────────────────
+
+// ── [NEW] INLINE API KEY MANAGEMENT (in Settings — replaces popup) ─────────
+
+// Current provider tab in the API key section
+let _aksProvider = 'openrouter';
+
+const AKS_DESCS = {
+  openrouter: 'Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style="color:var(--acc)">openrouter.ai/keys</a> — free tier available.',
+  deepseek:   'Get a key at <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" style="color:var(--acc)">platform.deepseek.com</a>.',
+  gemini:     'Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--acc)">aistudio.google.com</a>.',
+  openai:     'Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--acc)">platform.openai.com</a>.',
+  local:      'Connect to Ollama, LM Studio, or any OpenAI-compatible local server. API key is optional.',
+};
+
+function aksSwitch(prov, btn) {
+  _aksProvider = prov;
+  // Update tab highlight
+  ['openrouter','deepseek','gemini','openai','local'].forEach(p => {
+    const b = document.getElementById('aks-btn-' + p);
+    if (!b) return;
+    const isActive = p === prov;
+    b.style.background = isActive ? 'var(--acc)' : 'var(--hov)';
+    b.style.color = isActive ? '#fff' : 'var(--tx2)';
+  });
+
+  // Populate key field from current state
+  const keyInput  = document.getElementById('aks-key-input');
+  const localWrap = document.getElementById('aks-local-url-wrap');
+  const keyLabel  = document.getElementById('aks-key-label');
+  const descEl    = document.getElementById('aks-desc');
+  const errEl     = document.getElementById('aks-err');
+  const okEl      = document.getElementById('aks-ok');
+  if (keyInput)  keyInput.value = '';
+  if (errEl)     { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (okEl)      { okEl.style.display = 'none'; okEl.textContent = ''; }
+
+  if (descEl) descEl.innerHTML = AKS_DESCS[prov] || '';
+
+  if (prov === 'local') {
+    if (localWrap) localWrap.style.display = 'block';
+    const urlInput = document.getElementById('aks-local-url');
+    if (urlInput) urlInput.value = S.localBaseUrl || 'http://localhost:11434';
+    if (keyLabel) keyLabel.textContent = 'API Key (optional)';
+    if (keyInput) keyInput.value = S.localKey || '';
+  } else {
+    if (localWrap) localWrap.style.display = 'none';
+    if (keyLabel) keyLabel.textContent = 'API Key';
+    const currentKey = {
+      openrouter: S.key,
+      deepseek:   S.deepseekKey,
+      gemini:     S.geminiKey,
+      openai:     S.openaiKey,
+    }[prov] || '';
+    if (keyInput) {
+      // Show masked version if key exists
+      keyInput.value = currentKey ? '••••••••' + currentKey.slice(-4) : '';
+      keyInput.placeholder = currentKey ? 'Enter new key to replace…' : 'Paste key here…';
+    }
+  }
+
+  // Show existing key status
+  _aksShowStatus(prov);
+}
+
+function _aksShowStatus(prov) {
+  const okEl = document.getElementById('aks-ok');
+  if (!okEl) return;
+  const connected = {
+    openrouter: !!S.key,
+    deepseek:   !!S.deepseekKey,
+    gemini:     !!S.geminiKey,
+    openai:     !!S.openaiKey,
+    local:      !!(S.localBaseUrl && S.localBaseUrl !== 'http://localhost:11434'),
+  }[prov];
+  if (connected) {
+    okEl.textContent = '✓ Connected';
+    okEl.style.display = 'block';
+  } else {
+    okEl.style.display = 'none';
+  }
+}
+
+async function aksSaveKey() {
+  const keyInput  = document.getElementById('aks-key-input');
+  const errEl     = document.getElementById('aks-err');
+  const okEl      = document.getElementById('aks-ok');
+  if (!keyInput) return;
+
+  const val = keyInput.value.trim();
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (okEl)  { okEl.style.display = 'none'; okEl.textContent = ''; }
+
+  const prov = _aksProvider;
+
+  if (prov === 'local') {
+    const urlInput = document.getElementById('aks-local-url');
+    const urlVal = urlInput ? urlInput.value.trim() : '';
+    if (!urlVal) {
+      if (errEl) { errEl.textContent = 'Server URL is required.'; errEl.style.display = 'block'; }
+      return;
+    }
+    S.localBaseUrl = urlVal;
+    S.localKey = val || '';
+    persist();
+    KeyStore.saveKey('local', JSON.stringify({ baseUrl: urlVal, key: val }), false)
+      .then(src => updateSecurityStatus(src));
+    updateKeyUI();
+    reloadModels();
+    if (okEl) { okEl.textContent = '✓ Local server connected'; okEl.style.display = 'block'; }
+    toast('Local server connected', 'ok');
+    return;
+  }
+
+  // Skip if the field still shows the masked version (no change)
+  if (val.startsWith('••••')) {
+    if (okEl) { okEl.textContent = '✓ Already connected'; okEl.style.display = 'block'; }
+    return;
+  }
+
+  if (!val) {
+    if (errEl) { errEl.textContent = 'Please paste an API key.'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  // Save key to state
+  if (prov === 'openrouter') {
+    S.key = val;
+    KeyStore.saveKey('openrouter', val, false).then(src => updateSecurityStatus(src));
+  } else if (prov === 'deepseek') {
+    S.deepseekKey = val;
+    KeyStore.saveKey('deepseek', val, false).then(src => updateSecurityStatus(src));
+  } else if (prov === 'gemini') {
+    S.geminiKey = val;
+    KeyStore.saveKey('gemini', val, false).then(src => updateSecurityStatus(src));
+  } else if (prov === 'openai') {
+    S.openaiKey = val;
+    KeyStore.saveKey('openai', val, false).then(src => updateSecurityStatus(src));
+  }
+
+  // Switch provider and reload models
+  S.provider = prov;
+  persist();
+  updateKeyUI();
+  reloadModels();
+
+  if (okEl) { okEl.textContent = '✓ Key saved — loading models…'; okEl.style.display = 'block'; }
+  if (keyInput) { keyInput.value = ''; keyInput.placeholder = 'Enter new key to replace…'; }
+  toast(prov + ' key saved ✓', 'ok');
+  _updateSidebarFooter();
+}
+
+async function aksClearKey() {
+  const prov = _aksProvider;
+  if (prov === 'openrouter') S.key = '';
+  else if (prov === 'deepseek') S.deepseekKey = '';
+  else if (prov === 'gemini') S.geminiKey = '';
+  else if (prov === 'openai') S.openaiKey = '';
+  else if (prov === 'local') { S.localBaseUrl = ''; S.localKey = ''; }
+
+  KeyStore.clearKeys ? KeyStore.clearKeys(prov) : persist();
+  persist();
+  updateKeyUI();
+
+  const keyInput  = document.getElementById('aks-key-input');
+  const okEl      = document.getElementById('aks-ok');
+  if (keyInput) { keyInput.value = ''; keyInput.placeholder = 'Paste key here…'; }
+  if (okEl)     { okEl.style.display = 'none'; }
+
+  toast(prov + ' key removed', 'ok');
+  _updateSidebarFooter();
+}
+
+/** Called when Settings opens — initialize the API key section */
+function aksInit() {
+  aksSwitch(_aksProvider, document.getElementById('aks-btn-' + _aksProvider));
+}
+
+// ── [NEW] SIDEBAR FOOTER UPDATER ──────────────────────────────────────────
+/**
+ * Updates the sidebar footer to show either:
+ *  - Google account card (when signed in)
+ *  - "Sign in or add API key" prompt (when no Google + no keys)
+ *  - "API key connected" status (when keys set but no Google)
+ */
+function _updateSidebarFooter() {
+  const googlePanel = document.getElementById('sb-google-signed-in');
+  const akdArea     = document.getElementById('akd-area');
+  const keyDot      = document.getElementById('key-dot');
+  const keyText     = document.getElementById('key-text');
+
+  const googleConnected = _gTokenValid && _gTokenValid() && S.google?.user;
+  const hasKey = !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl);
+
+  if (googlePanel) googlePanel.style.display = googleConnected ? 'block' : 'none';
+
+  if (googleConnected && S.google.user) {
+    // Update Google panel content
+    const nameEl  = document.getElementById('sb-google-name');
+    const initEl  = document.getElementById('sb-google-avatar-initial');
+    const imgEl   = document.getElementById('sb-google-avatar-img');
+    if (nameEl)  nameEl.textContent  = S.google.user.name || 'Google Account';
+    if (initEl)  initEl.textContent  = (S.google.user.name || 'G')[0].toUpperCase();
+    if (imgEl && S.google.user.picture) {
+      imgEl.src = S.google.user.picture;
+      imgEl.style.display = 'block';
+      if (initEl) initEl.style.display = 'none';
+    }
+  }
+
+  // akd area: hide when Google is connected (Google panel takes its place)
+  if (akdArea) akdArea.style.display = googleConnected ? 'none' : 'flex';
+
+  if (!googleConnected) {
+    if (keyDot) keyDot.className = hasKey ? 'akdot on' : 'akdot off';
+    if (keyText) {
+      keyText.textContent = hasKey
+        ? 'API key connected'
+        : 'Sign in or add API key';
+    }
+  }
+}
+
+// Called from sidebar footer click when NOT signed in to Google
+function _akdClick() {
+  openSettings();
+  setTimeout(() => {
+    const hasKey = !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl);
+    // Scroll to Google sign-in if no key, otherwise to API key section
+    const target = document.getElementById(hasKey ? 'api-key-section' : 'google-signin-section');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
+}
+
+// ── END INLINE API KEY + SIDEBAR FOOTER ───────────────────────────────────
