@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas — Developer Documentation</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:    #0d0d14;
+    --bg2:   #13131f;
+    --surf:  #1a1a2a;
+    --elev:  #202033;
+    --bdr:   rgba(255,255,255,.08);
+    --acc:   #7c6aff;
+    --acc2:  #9d8fff;
+    --grn:   #2dd4a0;
+    --amb:   #f5a623;
+    --red:   #ff5f6d;
+    --tx1:   #e8e8f5;
+    --tx2:   #a0a0bc;
+    --tx3:   #5a5a72;
+    --mono:  'DM Mono', monospace;
+    --sans:  'DM Sans', sans-serif;
+    --disp:  'Syne', sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--tx1);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar nav ── */
+  .doc-nav {
+    width: 240px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--bg2);
+    border-right: 1px solid var(--bdr);
+    padding: 28px 0 40px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bdr) transparent;
+  }
+  .doc-nav::-webkit-scrollbar { width: 4px; }
+  .doc-nav::-webkit-scrollbar-thumb { background: var(--bdr); border-radius: 2px; }
+
+  .nav-logo {
+    font-family: var(--disp);
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--acc2);
+    padding: 0 20px 24px;
+    letter-spacing: -0.5px;
+  }
+  .nav-logo span { color: var(--tx3); font-weight: 700; font-size: 11px; display: block; margin-top: 2px; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--sans); }
+
+  .nav-group { margin-bottom: 6px; }
+  .nav-group-label {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+    color: var(--tx3);
+    padding: 8px 20px 4px;
+  }
+  .nav-link {
+    display: block;
+    padding: 6px 20px;
+    font-size: 13px;
+    color: var(--tx2);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+    line-height: 1.4;
+  }
+  .nav-link:hover  { color: var(--tx1); background: rgba(124,106,255,.06); border-left-color: var(--bdr); }
+  .nav-link.active { color: var(--acc2); border-left-color: var(--acc); background: rgba(124,106,255,.08); }
+  .nav-link.sub    { padding-left: 32px; font-size: 12px; }
+
+  /* ── Main content ── */
+  .doc-content {
+    flex: 1;
+    min-width: 0;
+    padding: 48px 64px 120px;
+    max-width: 900px;
+  }
+
+  /* ── Typography ── */
+  h1 {
+    font-family: var(--disp);
+    font-size: 40px;
+    font-weight: 800;
+    color: var(--tx1);
+    letter-spacing: -1.5px;
+    line-height: 1.1;
+    margin-bottom: 12px;
+  }
+  h1 .accent { color: var(--acc2); }
+
+  h2 {
+    font-family: var(--disp);
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--tx1);
+    letter-spacing: -0.5px;
+    margin: 56px 0 16px;
+    padding-top: 56px;
+    border-top: 1px solid var(--bdr);
+    scroll-margin-top: 24px;
+  }
+  h2:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+
+  h3 {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--acc2);
+    margin: 28px 0 10px;
+    scroll-margin-top: 24px;
+  }
+
+  h4 {
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--tx3);
+    margin: 20px 0 8px;
+  }
+
+  p { margin-bottom: 14px; color: var(--tx2); }
+  p strong { color: var(--tx1); font-weight: 500; }
+  p a, li a { color: var(--acc2); text-decoration: none; }
+  p a:hover, li a:hover { text-decoration: underline; }
+
+  ul, ol { padding-left: 20px; margin-bottom: 14px; color: var(--tx2); }
+  li { margin-bottom: 5px; }
+  li strong { color: var(--tx1); }
+  li code { font-family: var(--mono); font-size: 12px; background: var(--elev); padding: 1px 5px; border-radius: 3px; color: var(--acc2); }
+
+  /* ── Hero ── */
+  .hero {
+    margin-bottom: 48px;
+    padding-bottom: 36px;
+    border-bottom: 1px solid var(--bdr);
+  }
+  .hero-sub {
+    font-size: 16px;
+    color: var(--tx3);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px;
+    background: var(--surf);
+    border: 1px solid var(--bdr);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--tx2);
+  }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--grn); }
+  .badge.warn .dot { background: var(--amb); }
+  .badge.info .dot { background: var(--acc); }
+
+  /* ── Code blocks ── */
+  pre {
+    background: var(--surf);
+    border: 1px solid var(--bdr);
+    border-radius: 8px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 12px 0 18px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--tx1);
+    position: relative;
+  }
+  pre .com  { color: var(--tx3); }
+  pre .kw   { color: var(--acc2); }
+  pre .str  { color: var(--grn); }
+  pre .fn   { color: #f5a623; }
+  pre .num  { color: #ff8b8b; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--elev);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--acc2);
+  }
+  pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; margin: 12px 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    padding: 8px 14px;
+    background: var(--surf);
+    color: var(--tx3);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 500;
+    border-bottom: 1px solid var(--bdr);
+  }
+  td {
+    padding: 9px 14px;
+    color: var(--tx2);
+    border-bottom: 1px solid rgba(255,255,255,.04);
+    vertical-align: top;
+  }
+  td code { font-size: 11px; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* ── Callouts ── */
+  .callout {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    margin: 16px 0;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+  .callout-icon { flex-shrink: 0; font-size: 16px; margin-top: 1px; }
+  .callout-body { color: var(--tx2); }
+  .callout-body strong { color: var(--tx1); }
+  .callout.note  { background: rgba(124,106,255,.08); border: 1px solid rgba(124,106,255,.2); }
+  .callout.warn  { background: rgba(245,166,35,.07);  border: 1px solid rgba(245,166,35,.2); }
+  .callout.tip   { background: rgba(45,212,160,.07);  border: 1px solid rgba(45,212,160,.2); }
+  .callout.danger { background: rgba(255,95,109,.07); border: 1px solid rgba(255,95,109,.2); }
+
+  /* ── Section cards ── */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0 24px; }
+  .card {
+    background: var(--surf);
+    border: 1px solid var(--bdr);
+    border-radius: 8px;
+    padding: 14px 16px;
+    transition: border-color .15s;
+  }
+  .card:hover { border-color: rgba(124,106,255,.3); }
+  .card-title { font-size: 13px; font-weight: 500; color: var(--tx1); margin-bottom: 4px; }
+  .card-desc  { font-size: 12px; color: var(--tx3); line-height: 1.5; }
+  .card-icon  { font-size: 18px; margin-bottom: 6px; }
+
+  /* ── Flow diagram ── */
+  .flow {
+    background: var(--surf);
+    border: 1px solid var(--bdr);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--tx2);
+    line-height: 2;
+  }
+  .flow .node  { color: var(--tx1); }
+  .flow .arrow { color: var(--tx3); }
+  .flow .yes   { color: var(--grn); }
+  .flow .no    { color: var(--red); }
+  .flow .end   { color: var(--acc2); }
+
+  /* ── Divider ── */
+  .divider { border: none; border-top: 1px solid var(--bdr); margin: 32px 0; }
+
+  /* ── Key-value pairs ── */
+  .kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 16px; margin: 10px 0 18px; font-size: 13px; }
+  .kv-key   { color: var(--tx3); font-family: var(--mono); font-size: 12px; padding-top: 2px; }
+  .kv-val   { color: var(--tx2); }
+
+  /* ── State tree ── */
+  .state-block { background: var(--surf); border: 1px solid var(--bdr); border-radius: 8px; padding: 16px 18px; margin: 12px 0; font-family: var(--mono); font-size: 12px; line-height: 1.8; }
+  .state-block .s-key   { color: var(--acc2); }
+  .state-block .s-type  { color: var(--tx3); }
+  .state-block .s-desc  { color: var(--tx2); margin-left: 8px; }
+  .state-block .s-head  { color: var(--amb); }
+
+  /* ── Storage diagram ── */
+  .storage-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 6px; margin-bottom: 8px; }
+  .storage-row .sr-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+  .storage-row .sr-name { font-size: 13px; color: var(--tx1); font-weight: 500; }
+  .storage-row .sr-desc { font-size: 12px; color: var(--tx3); margin-top: 2px; }
+  .storage-row .sr-badge { font-size: 10px; font-family: var(--mono); padding: 2px 6px; background: var(--elev); border-radius: 3px; color: var(--acc2); margin-left: 8px; }
+
+  /* ── Top anchor helper ── */
+  .section-anchor { display: block; height: 0; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .doc-nav { display: none; }
+    .doc-content { padding: 32px 24px 80px; }
+    h1 { font-size: 30px; }
+    .card-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── Navigation ── -->
+<nav class="doc-nav">
+  <div class="nav-logo">Atlas<span>Developer Docs</span></div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Overview</div>
+    <a href="#intro" class="nav-link">Introduction</a>
+    <a href="#architecture" class="nav-link">Architecture</a>
+    <a href="#quickstart" class="nav-link">Quick Start</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Core Systems</div>
+    <a href="#state" class="nav-link">State Object (S)</a>
+    <a href="#storage" class="nav-link">Storage Layer</a>
+    <a href="#providers" class="nav-link">API Providers</a>
+    <a href="#messaging" class="nav-link">Messaging Pipeline</a>
+    <a href="#streaming" class="nav-link">Streaming</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Features</div>
+    <a href="#skills" class="nav-link">Skills System</a>
+    <a href="#patch" class="nav-link">Patch Edit System</a>
+    <a href="#artifacts" class="nav-link">Artifact Panel</a>
+    <a href="#output-formats" class="nav-link">Output Formats</a>
+    <a href="#image-gen" class="nav-link">Image Generation</a>
+    <a href="#tools" class="nav-link">Tool Use</a>
+    <a href="#cost" class="nav-link">Cost Tracker</a>
+    <a href="#clarify" class="nav-link">Clarifying Questions</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Integrations</div>
+    <a href="#google" class="nav-link">Google Sign-In</a>
+    <a href="#drive-sync" class="nav-link">Drive Chat Sync</a>
+    <a href="#local-model" class="nav-link">Local Model (WebGPU)</a>
+    <a href="#web-search" class="nav-link">Web Search</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">UI Systems</div>
+    <a href="#settings" class="nav-link">Settings Panel</a>
+    <a href="#sidebar" class="nav-link">Sidebar &amp; Conversations</a>
+    <a href="#markdown" class="nav-link">Markdown Renderer</a>
+    <a href="#theme" class="nav-link">Themes &amp; Fonts</a>
+    <a href="#api-keys-ui" class="nav-link">API Key UI</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Reference</div>
+    <a href="#s-object" class="nav-link">S Object Reference</a>
+    <a href="#functions" class="nav-link">Key Functions</a>
+    <a href="#css-vars" class="nav-link">CSS Variables</a>
+    <a href="#data-formats" class="nav-link">Data Formats</a>
+    <a href="#local-storage-keys" class="nav-link">localStorage Keys</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Deep Dives</div>
+    <a href="#file-attachments" class="nav-link">File Attachments</a>
+    <a href="#file-generators" class="nav-link">File Generation</a>
+    <a href="#html-structure" class="nav-link">HTML Structure</a>
+    <a href="#cost-detail" class="nav-link">Cost Calculation</a>
+    <a href="#security" class="nav-link">Security Model</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Developer Guide</div>
+    <a href="#adding-provider" class="nav-link">Add a Provider</a>
+    <a href="#adding-skill" class="nav-link">Add a Skill</a>
+    <a href="#adding-tool" class="nav-link">Add a Tool</a>
+    <a href="#debugging" class="nav-link">Debugging</a>
+    <a href="#troubleshooting" class="nav-link">Troubleshooting</a>
+    <a href="#changelog" class="nav-link">Change Log</a>
+  </div>
+</nav>
+
+<!-- ── Content ── -->
+<main class="doc-content">
+
+  <!-- INTRO -->
+  <section id="intro">
+    <div class="hero">
+      <h1><span class="accent">Atlas</span> — AI Chat</h1>
+      <p class="hero-sub">A unified, single-page AI chat interface supporting multiple cloud providers and local in-browser models — with no build step, no backend, and no dependencies to install.</p>
+      <div class="badge-row">
+        <span class="badge"><span class="dot"></span>No build step</span>
+        <span class="badge"><span class="dot"></span>3-file architecture</span>
+        <span class="badge info"><span class="dot"></span>5 AI providers</span>
+        <span class="badge info"><span class="dot"></span>WebGPU local models</span>
+        <span class="badge warn"><span class="dot"></span>Chrome 113+ for local</span>
+      </div>
+    </div>
+
+    <p>Atlas is a fully client-side AI chat application. Every feature — streaming responses, file generation, multi-provider routing, artifact preview, Google Drive sync, and in-browser local models — runs entirely in the browser. There is no server component, no build pipeline, and no framework. Drop three files into any directory and open <code>index.html</code>.</p>
+
+    <div class="callout note">
+      <span class="callout-icon">ℹ️</span>
+      <div class="callout-body"><strong>Origin requirement:</strong> API keys and chat history only persist across sessions when the page is served over HTTP (<code>http://localhost</code> or any hosted URL). Opening as a <code>file://</code> URL disables persistent storage. An orange banner is shown automatically when this is detected.</div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="architecture">
+    <h2>Architecture</h2>
+    <p>Atlas uses a strict three-file split with no shared build output:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>File</th><th>Role</th><th>~Lines</th></tr>
+        <tr><td><code>index.html</code></td><td>All HTML structure, element IDs, inline event handlers</td><td>~970</td></tr>
+        <tr><td><code>atlas.css</code></td><td>All styles, CSS variables, animations, responsive rules</td><td>~1,430</td></tr>
+        <tr><td><code>atlas.js</code></td><td>All application logic — state, API calls, UI, storage</td><td>~10,700</td></tr>
+      </table>
+    </div>
+
+    <p><strong>atlas.js</strong> is divided into named sections separated by <code>// ──</code> comments. The section list is documented at the top of the file. Searching for <code>// ── SECTION NAME</code> navigates directly to any subsystem.</p>
+
+    <h3>External dependencies (CDN only)</h3>
+    <ul>
+      <li><strong>DOMPurify</strong> — sanitises AI-generated HTML before rendering into the DOM</li>
+      <li><strong>Google Fonts</strong> — Syne (display), DM Sans (UI), DM Mono (code)</li>
+      <li><strong>WebLLM <code>@0.2.46</code></strong> — lazy-loaded ESM module for WebGPU local model inference; only fetched when the local model feature is used</li>
+      <li><strong>Marked, Highlight.js, KaTeX</strong> — loaded on-demand by the markdown renderer when code blocks or math expressions are encountered</li>
+      <li><strong>jsPDF, docx.js, pptxgenjs</strong> — loaded on-demand when a file export is triggered</li>
+    </ul>
+
+    <div class="callout tip">
+      <span class="callout-icon">💡</span>
+      <div class="callout-body">All on-demand libraries are loaded via <code>&lt;script&gt;</code> injection at first use and cached by the browser. They are never bundled into atlas.js, keeping the initial page load fast.</div>
+    </div>
+  </section>
+
+  <!-- QUICKSTART -->
+  <section id="quickstart">
+    <h2>Quick Start</h2>
+
+    <h3>Run locally</h3>
+    <pre><span class="com"># Any static server works</span>
+python3 -m http.server 8080
+<span class="com"># Then open:</span>
+http://localhost:8080/index.html</pre>
+
+    <h3>First-time setup</h3>
+    <ol>
+      <li>Open the app and click <strong>Sign in or add API key</strong> in the sidebar footer.</li>
+      <li>In the Settings panel that opens, choose a provider tab (OpenRouter is recommended as it gives access to hundreds of models with a single key).</li>
+      <li>Paste your API key and click <strong>Connect</strong>.</li>
+      <li>Close Settings — the model dropdown in the topbar will now populate.</li>
+    </ol>
+
+    <h3>Alternatively: use a local model (no API key needed)</h3>
+    <ol>
+      <li>Open Settings → <strong>Local Model</strong> section.</li>
+      <li>Enable the <em>Enable local fallback</em> toggle.</li>
+      <li>Select a model and click <strong>⬇ Download</strong>. The first download is 600 MB–1.2 GB.</li>
+      <li>Once downloaded, send a message — Atlas will use the local model automatically.</li>
+    </ol>
+
+    <div class="callout warn">
+      <span class="callout-icon">⚠️</span>
+      <div class="callout-body"><strong>WebGPU required for local models.</strong> Use Chrome 113+, Edge 113+, or any Chromium-based browser on a desktop with a supported GPU. Firefox does not support WebGPU by default. The Settings panel shows a warning if WebGPU is unavailable.</div>
+    </div>
+  </section>
+
+  <!-- STATE -->
+  <section id="state">
+    <h2>State Object (S)</h2>
+    <p>All application state lives in a single global object <code>S</code>. It is the single source of truth for the running app and is serialised to <code>SafeStorage</code> (localStorage) on every meaningful change via <code>persist()</code>.</p>
+    <p><strong>API keys are never stored in S</strong> — they live only in <code>KeyStore</code> (Credential API or sessionStorage). S holds empty strings as placeholders that are populated at runtime by <code>initSecureStorage()</code>.</p>
+
+    <div class="state-block">
+      <div><span class="s-head">// Provider & keys (runtime only — not persisted)</span></div>
+      <div><span class="s-key">key</span><span class="s-type">: string</span><span class="s-desc">— OpenRouter API key (in-memory)</span></div>
+      <div><span class="s-key">deepseekKey</span><span class="s-type">: string</span><span class="s-desc">— DeepSeek API key</span></div>
+      <div><span class="s-key">geminiKey</span><span class="s-type">: string</span><span class="s-desc">— Google Gemini API key</span></div>
+      <div><span class="s-key">openaiKey</span><span class="s-type">: string</span><span class="s-desc">— OpenAI API key</span></div>
+      <div><span class="s-key">localBaseUrl</span><span class="s-type">: string</span><span class="s-desc">— Local server URL (default: http://localhost:11434)</span></div>
+      <div><span class="s-key">localKey</span><span class="s-type">: string</span><span class="s-desc">— Optional bearer token for local server</span></div>
+      <br>
+      <div><span class="s-head">// Provider selection (persisted)</span></div>
+      <div><span class="s-key">provider</span><span class="s-type">: string</span><span class="s-desc">— 'openrouter' | 'deepseek' | 'gemini' | 'openai' | 'local'</span></div>
+      <div><span class="s-key">model</span><span class="s-type">: object|null</span><span class="s-desc">— Currently selected model object {id, name, context_length, pricing}</span></div>
+      <div><span class="s-key">allModels</span><span class="s-type">: array</span><span class="s-desc">— Full list from live API fetch</span></div>
+      <div><span class="s-key">filtModels</span><span class="s-type">: array</span><span class="s-desc">— Currently visible models after filter</span></div>
+      <div><span class="s-key">favModels</span><span class="s-type">: array</span><span class="s-desc">— Pinned model IDs</span></div>
+      <br>
+      <div><span class="s-head">// Conversation state (persisted)</span></div>
+      <div><span class="s-key">convs</span><span class="s-type">: array</span><span class="s-desc">— [{id, title, msgs, codeStore}] all conversations</span></div>
+      <div><span class="s-key">chatId</span><span class="s-type">: string|null</span><span class="s-desc">— Active conversation ID</span></div>
+      <div><span class="s-key">msgs</span><span class="s-type">: array</span><span class="s-desc">— Messages in the active conversation</span></div>
+      <div><span class="s-key">codeStore</span><span class="s-type">: Map</span><span class="s-desc">— blockId → {lang, content} for the patch edit system</span></div>
+      <br>
+      <div><span class="s-head">// UI & config (persisted)</span></div>
+      <div><span class="s-key">cfg</span><span class="s-type">: object</span><span class="s-desc">— {temp, maxTok, topP, imgSize, imgModel, donts, font, fontSize, smartPatch, globalSysPrompt, chatDensity, budget}</span></div>
+      <div><span class="s-key">streaming</span><span class="s-type">: boolean</span><span class="s-desc">— True while a response is streaming</span></div>
+      <div><span class="s-key">sbOpen</span><span class="s-type">: boolean</span><span class="s-desc">— Sidebar open state</span></div>
+      <div><span class="s-key">theme</span><span class="s-type">: string</span><span class="s-desc">— 'dark' | 'light'</span></div>
+      <div><span class="s-key">imageGenMode</span><span class="s-type">: boolean</span><span class="s-desc">— Image generation mode active</span></div>
+      <div><span class="s-key">webSearchMode</span><span class="s-type">: boolean</span><span class="s-desc">— OpenRouter web search plugin active</span></div>
+      <div><span class="s-key">outputFmt</span><span class="s-type">: string|null</span><span class="s-desc">— Active output format: null | 'pdf' | 'docx' | 'pptx' | 'css'</span></div>
+      <div><span class="s-key">totalCost</span><span class="s-type">: number</span><span class="s-desc">— Cumulative session cost in USD</span></div>
+      <div><span class="s-key">budget</span><span class="s-type">: number</span><span class="s-desc">— Spending cap in USD (0 = no limit)</span></div>
+      <div><span class="s-key">files</span><span class="s-type">: array</span><span class="s-desc">— Attached files for the current message</span></div>
+      <div><span class="s-key">google</span><span class="s-type">: object</span><span class="s-desc">— {accessToken, tokenExpiry, user, scopes} Google OAuth state</span></div>
+    </div>
+  </section>
+
+  <!-- STORAGE -->
+  <section id="storage">
+    <h2>Storage Layer</h2>
+    <p>Atlas uses three separate storage backends, each for a different category of data.</p>
+
+    <div class="storage-row">
+      <span class="sr-icon">🗄️</span>
+      <div>
+        <div class="sr-name">IndexedDB — <code>ChatStorage</code> <span class="sr-badge">atlas_db v2</span></div>
+        <div class="sr-desc">Stores all conversation history. Each conversation is a record with <code>{id, title, msgs[], codeStore[]}</code>. Messages are capped at the last 40 per conversation to prevent unbounded growth. Accessed via the <code>ChatStorage</code> IIFE: <code>saveConversation()</code>, <code>loadAllConversations()</code>, <code>deleteConversation()</code>, <code>clearAll()</code>.</div>
+      </div>
+    </div>
+
+    <div class="storage-row">
+      <span class="sr-icon">🔐</span>
+      <div>
+        <div class="sr-name">Credential API / SessionStorage — <code>KeyStore</code></div>
+        <div class="sr-desc">Stores API keys. Prefers the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Credential_Management_API">Credential Management API</a> for true cross-session persistence with browser-managed security. Falls back to <code>sessionStorage</code> (clears on tab close) if Credential API is unavailable. Keys are never written to localStorage or S directly. <code>KeyStore.saveKey(provider, value)</code>, <code>KeyStore.loadKey(provider)</code>.</div>
+      </div>
+    </div>
+
+    <div class="storage-row">
+      <span class="sr-icon">⚙️</span>
+      <div>
+        <div class="sr-name">localStorage — <code>SafeStorage</code> <span class="sr-badge">atlas_v1</span></div>
+        <div class="sr-desc">Stores non-sensitive app settings: theme, provider selection, model ID, config values (<code>S.cfg</code>), sidebar state. <strong>Never</strong> stores API keys, conversation content, or Google tokens. A single JSON object under the key <code>atlas_v1</code>.</div>
+      </div>
+    </div>
+
+    <div class="storage-row">
+      <span class="sr-icon">☁️</span>
+      <div>
+        <div class="sr-name">Google Drive — <code>syncChatsToDrive()</code></div>
+        <div class="sr-desc">When the user is signed in to Google, all conversations are automatically uploaded to a private file named <code>atlas-chat-history.json</code> in their Drive. Syncs are debounced by 3 seconds after each <code>persist()</code> call. Uses the <code>drive.file</code> scope so Atlas can only access files it created.</div>
+      </div>
+    </div>
+
+    <h3>Initialisation sequence</h3>
+    <p>On page load, <code>initSecureStorage()</code> runs this sequence:</p>
+    <div class="flow">
+      <div><span class="node">1. Open IndexedDB</span> <span class="arrow">→</span> <span class="node">ChatStorage.init()</span></div>
+      <div><span class="node">2. Load conversations</span> <span class="arrow">→</span> <span class="node">populate S.convs</span></div>
+      <div><span class="node">3. Load settings</span> <span class="arrow">→</span> <span class="node">SafeStorage → S.cfg, S.provider, S.theme…</span></div>
+      <div><span class="node">4. Load API keys</span> <span class="arrow">→</span> <span class="node">KeyStore.loadKey() × 4 providers</span></div>
+      <div><span class="node">5. Restore Google session</span> <span class="arrow">→</span> <span class="node">_gPersist() stored token if valid</span></div>
+      <div><span class="node">6. Update UI</span> <span class="arrow">→</span> <span class="node">renderChatList(), updateKeyUI(), updateSecurityStatus()</span></div>
+      <div><span class="node">7. Load models</span> <span class="arrow">→</span> <span class="yes">if any key present</span> <span class="arrow">→</span> <span class="node">reloadModels()</span></div>
+    </div>
+  </section>
+
+  <!-- PROVIDERS -->
+  <section id="providers">
+    <h2>API Providers</h2>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Provider</th><th>S.provider value</th><th>Key field</th><th>API base URL</th><th>Model list endpoint</th></tr>
+        <tr><td>OpenRouter</td><td><code>'openrouter'</code></td><td><code>S.key</code></td><td><code>openrouter.ai/api/v1</code></td><td><code>/models</code></td></tr>
+        <tr><td>DeepSeek</td><td><code>'deepseek'</code></td><td><code>S.deepseekKey</code></td><td><code>api.deepseek.com/v1</code></td><td>Fallback list only</td></tr>
+        <tr><td>Gemini</td><td><code>'gemini'</code></td><td><code>S.geminiKey</code></td><td><code>generativelanguage.googleapis.com</code></td><td><code>/v1beta/models</code></td></tr>
+        <tr><td>OpenAI</td><td><code>'openai'</code></td><td><code>S.openaiKey</code></td><td><code>api.openai.com/v1</code></td><td><code>/models</code></td></tr>
+        <tr><td>Local</td><td><code>'local'</code></td><td><code>S.localKey</code> (opt.)</td><td><code>S.localBaseUrl</code></td><td><code>/v1/models</code></td></tr>
+      </table>
+    </div>
+
+    <h3>Provider selection logic</h3>
+    <p>The active key is resolved at call-time in <code>sendMessage()</code> and <code>_doContinue()</code>:</p>
+    <pre>const activeKey =
+  S.provider === 'deepseek' ? S.deepseekKey :
+  S.provider === 'gemini'   ? S.geminiKey   :
+  S.provider === 'openai'   ? S.openaiKey   :
+  S.provider === 'local'    ? (S.localKey || 'local') :
+  S.key; <span class="com">// openrouter</span></pre>
+
+    <p>If <code>activeKey</code> is falsy and no local fallback is available, <code>openKeyModal()</code> is called — which now opens the Settings panel and scrolls to the API Keys section.</p>
+
+    <h3>Local provider (Ollama / LM Studio)</h3>
+    <p>The local provider sends OpenAI-compatible requests to <code>S.localBaseUrl + '/v1/chat/completions'</code>. Any server implementing the OpenAI chat completions API works. The API key field is optional — it's sent as a Bearer token if provided.</p>
+
+    <h4>Preset URLs</h4>
+    <div class="kv">
+      <span class="kv-key">Ollama</span><span class="kv-val"><code>http://localhost:11434</code></span>
+      <span class="kv-key">LM Studio</span><span class="kv-val"><code>http://localhost:1234</code></span>
+      <span class="kv-key">llama.cpp</span><span class="kv-val"><code>http://localhost:8080</code></span>
+    </div>
+  </section>
+
+  <!-- MESSAGING -->
+  <section id="messaging">
+    <h2>Messaging Pipeline</h2>
+    <p><code>sendMessage()</code> is the central dispatch function. It runs these stages in order:</p>
+
+    <div class="flow">
+      <div><span class="node">1. Read input</span> <span class="arrow">→</span> trim text, check empty</div>
+      <div><span class="node">2. Resolve active key</span> <span class="arrow">→</span> <span class="yes">key found</span> → continue  <span class="arrow">/</span> <span class="no">no key</span> → local fallback check → openKeyModal</div>
+      <div><span class="node">3. Clarifying question?</span> <span class="arrow">→</span> <span class="yes">first message + trigger</span> → showClarify() and pause</div>
+      <div><span class="node">4. Image gen mode?</span> <span class="arrow">→</span> <span class="yes">yes</span> → sendImageGenRequest()</div>
+      <div><span class="node">5. Patch edit intent?</span> <span class="arrow">→</span> <span class="yes">yes + codeStore has content</span> → inject current code block as context</div>
+      <div><span class="node">6. Output format?</span> <span class="arrow">→</span> <span class="yes">pdf/docx/pptx</span> → inject format system prompt</div>
+      <div><span class="node">7. Active skill?</span> <span class="arrow">→</span> <span class="yes">yes</span> → prepend skill system prompt</div>
+      <div><span class="node">8. Build message array</span> <span class="arrow">→</span> buildApiMsgs() — applies history cap, injects sys prompt</div>
+      <div><span class="node">9. Call API</span> <span class="arrow">→</span> callApi() → streams tokens into chat bubble</div>
+      <div><span class="node">10. Post-process</span> <span class="arrow">→</span> parse code blocks → codeStore, render artifacts, update cost, persist()</div>
+    </div>
+
+    <h3>buildApiMsgs()</h3>
+    <p>Assembles the message array sent to the API. Applies a token-based history cap by scanning from the most recent message backwards. Inserts the system prompt (from the system prompt bar, the active skill, or the global default) as the first element. Attaches any pending file attachments as multi-part content.</p>
+
+    <h3>Message object shape</h3>
+    <pre>{
+  role: <span class="str">'user'</span> | <span class="str">'assistant'</span>,
+  content: <span class="str">string</span> | <span class="str">array</span>,  <span class="com">// array for multi-part (text + image)</span>
+  iTok: <span class="num">number</span>,   <span class="com">// input tokens (from API response)</span>
+  oTok: <span class="num">number</span>,   <span class="com">// output tokens</span>
+  cost: <span class="num">number</span>,   <span class="com">// USD cost of this message</span>
+  files: <span class="str">array</span>,  <span class="com">// attached files metadata</span>
+  imageResult: <span class="str">object</span> | <span class="str">null</span>,  <span class="com">// {prompt, images:[{url}]}</span>
+  toolCalls: <span class="str">array</span> | <span class="str">null</span>,
+  toolResults: <span class="str">array</span> | <span class="str">null</span>,
+}</pre>
+  </section>
+
+  <!-- STREAMING -->
+  <section id="streaming">
+    <h2>Streaming</h2>
+    <p>All cloud providers use Server-Sent Events streaming. The <code>callApi()</code> function creates a <code>fetch</code> request with <code>stream: true</code>, reads the <code>ReadableStream</code> byte-by-byte, and fires a token callback for each decoded chunk.</p>
+
+    <h3>Provider-specific streaming</h3>
+    <ul>
+      <li><strong>OpenRouter / DeepSeek / OpenAI / Local</strong> — Standard OpenAI SSE format: <code>data: {"choices":[{"delta":{"content":"..."}}]}</code></li>
+      <li><strong>Gemini</strong> — Uses <code>streamGenerateContent</code> with <code>alt=sse</code>. Response chunks are parsed from <code>data: {...}</code> lines. Handled separately in <code>// ── GEMINI API ──</code>.</li>
+    </ul>
+
+    <h3>Abort</h3>
+    <p>Streaming can be aborted by clicking the ⏹ stop button. An <code>AbortController</code> stored at <code>S.ac</code> is used. When aborted, the partial response is retained in the chat and persisted.</p>
+
+    <h3>Continuation</h3>
+    <p>If a response is cut off due to <code>max_tokens</code> being reached, a <strong>Continue →</strong> button appears below the truncated message. Clicking it calls <code>_doContinue()</code> which resends the conversation including the partial response, asking the model to pick up where it left off. The continuation is appended to the existing bubble seamlessly.</p>
+  </section>
+
+  <!-- SKILLS -->
+  <section id="skills">
+    <h2>Skills System</h2>
+    <p>Skills are reusable system prompt fragments that specialise the model's behaviour for a task category. They are injected as the system prompt when a message is sent.</p>
+
+    <h3>Built-in skills</h3>
+    <div class="card-grid">
+      <div class="card"><div class="card-icon">🎨</div><div class="card-title">Frontend Design</div><div class="card-desc">Instruct the model to commit to a specific aesthetic direction, use distinctive fonts, and deliver complete working code without preamble.</div></div>
+      <div class="card"><div class="card-icon">📄</div><div class="card-title">Document Writing</div><div class="card-desc">Plain language, active voice, no filler phrases, structure matched to formality of the context.</div></div>
+      <div class="card"><div class="card-icon">💻</div><div class="card-title">Code Assistant</div><div class="card-desc">Correctness-first, idiomatic code, root-cause debugging, explicit trade-offs.</div></div>
+      <div class="card"><div class="card-icon">🧠</div><div class="card-title">Deep Analysis</div><div class="card-desc">Steel-man arguments, distinguish facts from inferences, surface load-bearing assumptions.</div></div>
+      <div class="card"><div class="card-icon">🎮</div><div class="card-title">Game Development</div><div class="card-desc">Three.js/Canvas specialisation with game loop, physics, and mobile input guidance.</div></div>
+      <div class="card"><div class="card-icon">📊</div><div class="card-title">Data Analysis</div><div class="card-desc">Structured output, chart recommendations, statistical rigour.</div></div>
+    </div>
+
+    <h3>Custom skills</h3>
+    <p>Users can create custom skills via the Skills section in Settings. Each skill has an <code>id</code>, <code>icon</code>, <code>name</code>, <code>desc</code>, and <code>prompt</code> string. Custom skills are stored in <code>S.cfg.customSkills</code> and persist across sessions.</p>
+
+    <h3>Auto-detect</h3>
+    <p>Atlas scans the user's input for intent keywords and automatically suggests a matching skill via the <strong>detected intent pill</strong> below the input box. The mapping is defined in <code>INTENT_MAP</code>. Auto-detection only fires on the first message of a conversation and only if no skill is already active.</p>
+
+    <h3>Skill injection</h3>
+    <p>When a skill is active, <code>sendMessage()</code> prepends the skill's <code>prompt</code> to the system prompt before building the API message array. The skill name is shown in the <strong>active skill pill</strong> next to the input.</p>
+  </section>
+
+  <!-- PATCH EDIT SYSTEM -->
+  <section id="patch">
+    <h2>Patch Edit System</h2>
+    <p>The patch edit system allows follow-up messages like "make the button blue" or "fix the loop on line 12" to produce minimal targeted diffs rather than full rewrites of the code. This preserves edit history and keeps responses fast and cheap.</p>
+
+    <h3>How it works</h3>
+    <ol>
+      <li>Every code block rendered in the chat is assigned a unique <code>blockId</code> and stored in <code>S.codeStore</code> as <code>{lang, content}</code>.</li>
+      <li><code>isEditIntent(text)</code> fires on every outgoing message. It returns <code>true</code> if the text contains an edit verb (fix, change, update…) AND a code-context keyword (color, function, class…) AND <code>S.codeStore</code> is non-empty.</li>
+      <li>When an edit is detected, <code>buildCodeStoreInjection()</code> picks the most relevant block (explicit block ID mention wins; otherwise the most recently rendered block) and injects the full current code as a numbered line listing into the system context.</li>
+      <li>A strict instruction is added telling the model to respond with only a patch in <code>```patch</code> format — never a full rewrite.</li>
+    </ol>
+
+    <h3>Large file handling</h3>
+    <p>For code blocks over ~16,000 characters (~4,000 tokens), the full file is not injected. Instead, a relevance scoring pass identifies the lines most likely to be referenced by the user's edit request. Up to 3 non-overlapping windows of ~60 lines each are selected and sent, with ellipsis markers where lines are omitted.</p>
+
+    <h3>Patch format</h3>
+    <pre>```patch
+<<<< FIND
+const color = 'red';
+====
+const color = 'blue';
+>>>> REPLACE
+```</pre>
+    <p>The patch engine parses these blocks and applies them to the stored code in <code>S.codeStore</code>. The updated artifact re-renders in the artifact panel.</p>
+
+    <div class="callout note">
+      <span class="callout-icon">ℹ️</span>
+      <div class="callout-body">The patch system only activates when <code>S.cfg.smartPatch</code> is <code>true</code> (the default). Users can disable it in Settings if they prefer full rewrites.</div>
+    </div>
+  </section>
+
+  <!-- ARTIFACTS -->
+  <section id="artifacts">
+    <h2>Artifact Panel</h2>
+    <p>When a code block is detected in an AI response, <code>previewCode(id)</code> is called and the artifact panel slides in from the right. The panel shows a live rendered preview of the code in an <code>&lt;iframe&gt;</code>.</p>
+
+    <h3>Artifact state</h3>
+    <pre>_artifacts = [{ id, lang, code, title, driveLink? }]
+_activeArt = 0  <span class="com">// index into _artifacts</span></pre>
+
+    <h3>Tabs</h3>
+    <p>Multiple artifacts from the same conversation each get a tab. Tabs show the language and a sequential number. Clicking a tab calls <code>activateArtifact(i)</code>. Tabs can be closed individually — closing a tab removes it from <code>_artifacts</code> but does not remove the code from the chat history.</p>
+
+    <h3>View modes</h3>
+    <ul>
+      <li><strong>Preview</strong> — rendered in a sandboxed <code>&lt;iframe&gt;</code> with <code>srcdoc</code></li>
+      <li><strong>Source</strong> — syntax-highlighted raw code view</li>
+      <li><strong>Visual Editor</strong> — active for DOCX and PPTX artifacts (see below)</li>
+    </ul>
+
+    <h3>Visual Editors</h3>
+    <p>DOCX and PPTX artifacts open a full word-processor or slide-editor interface inside the artifact panel, driven entirely by the JSON structure that the AI returned.</p>
+    <ul>
+      <li><strong>DOCX editor</strong> — renders as editable paragraphs, headings, and bullet lists. Serialises back to JSON on export.</li>
+      <li><strong>PPTX editor</strong> — renders slides with title/body/bullets, supports slide navigation, background colour picker, font size controls, and an undo stack.</li>
+    </ul>
+
+    <h3>Drive upload</h3>
+    <p>The ☁ Drive button in the artifact header uploads the current artifact's code to Google Drive as a file with the appropriate MIME type. Requires Google sign-in. After upload, a <em>View in Drive →</em> link appears in the artifact header.</p>
+
+    <h3>Resize</h3>
+    <p>The artifact panel is resizable by dragging the left edge handle. Width is constrained between 300px and 92vw. The chat area margin adjusts live during the drag.</p>
+  </section>
+
+  <!-- OUTPUT FORMATS -->
+  <section id="output-formats">
+    <h2>Output Formats</h2>
+    <p>The output format bar (toggled by the 📎 icon in the input row) lets users specify that the AI should respond with structured data for direct file download.</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Format</th><th>Code fence tag</th><th>JSON schema</th><th>Exported as</th></tr>
+        <tr><td>PDF</td><td><code>pdf-content</code></td><td><code>{title, author?, sections:[{heading,body,bullet_points?}], footer?}</code></td><td><code>.pdf</code> via jsPDF</td></tr>
+        <tr><td>Word</td><td><code>docx-content</code></td><td><code>{title, sections:[{heading?,body,bullet_points?}]}</code></td><td><code>.docx</code> via docx.js</td></tr>
+        <tr><td>PowerPoint</td><td><code>pptx-content</code></td><td><code>{title, slides:[{title,body?,bullets?,notes?}]}</code></td><td><code>.pptx</code> via pptxgenjs</td></tr>
+        <tr><td>CSS</td><td><code>css</code></td><td>Raw CSS text</td><td><code>.css</code> plain download</td></tr>
+      </table>
+    </div>
+
+    <p>When an output format is active, <code>sendMessage()</code> prepends the format's <code>systemPrompt</code> to the API call, instructing the model to respond exclusively with the fenced block. The renderer detects the tag and renders a download button instead of a code preview.</p>
+  </section>
+
+  <!-- IMAGE GEN -->
+  <section id="image-gen">
+    <h2>Image Generation</h2>
+    <p>Toggled via the 🎨 icon. When active, messages are sent to the selected image generation model via OpenRouter's image endpoint rather than the chat completions endpoint.</p>
+
+    <h3>Supported models</h3>
+    <pre>openai/dall-e-3, openai/dall-e-2
+stability/stable-diffusion-xl, .../3, .../3.5-large
+black-forest-labs/flux-1.1-pro, .../schnell, .../dev, .../pro
+recraft-ai/recraft-v3
+ideogram-ai/ideogram-v2</pre>
+
+    <p>The image model is separate from the chat model and is configured independently in Settings. Image size is also configurable (default: 1024×1024).</p>
+
+    <p>Generated images are stored in the message as <code>imageResult: {prompt, images: [{url}]}</code> and rendered in the chat with a download button.</p>
+  </section>
+
+  <!-- TOOL USE -->
+  <section id="tools">
+    <h2>Tool Use</h2>
+    <p>Tool definitions are registered in <code>initToolDefinitions()</code> and sent to the API in the <code>tools</code> field of the request payload. When the model returns a tool call, <code>_executeGoogleTool()</code> (for Google tools) or custom handlers dispatch to the appropriate function and return the result as a tool result message.</p>
+
+    <p>Tool calls are rendered in the chat as collapsible blocks showing the function name, arguments, and result. A confirmation modal appears before executing destructive tools.</p>
+
+    <div class="callout note">
+      <span class="callout-icon">ℹ️</span>
+      <div class="callout-body">Gmail and Google Calendar tool connectors have been removed from the current build. The <code>_executeGoogleTool()</code> stub returns <code>null</code>. The Google OAuth sign-in is retained for chat history sync only.</div>
+    </div>
+  </section>
+
+  <!-- COST TRACKER -->
+  <section id="cost">
+    <h2>Cost Tracker</h2>
+    <p>Every API response includes token counts. The cost tracker multiplies these by the model's per-token pricing and maintains a running total in <code>S.totalCost</code>.</p>
+
+    <h3>Pricing data</h3>
+    <p>For OpenRouter, pricing comes from the live <code>/models</code> API response (<code>pricing.prompt</code> and <code>pricing.completion</code> in USD per token). For DeepSeek and Gemini, hardcoded fallback pricing tables are used if the live fetch fails.</p>
+
+    <h3>Budget cap</h3>
+    <p>Users can set a budget in Settings. Once <code>S.totalCost</code> exceeds <code>S.budget</code>, a warning is shown and further messages are blocked until the budget is reset.</p>
+
+    <h3>Context bar</h3>
+    <p>The bar below the topbar shows how full the model's context window is. It reads <code>S.model.context_length</code> and estimates current token usage from the message history. Colour changes from green → amber → red as the window fills.</p>
+  </section>
+
+  <!-- CLARIFYING QUESTIONS -->
+  <section id="clarify">
+    <h2>Clarifying Questions</h2>
+    <p>On the first message of a new conversation, Atlas scans for patterns that suggest an ambiguous request and surfaces a quick clarification bar before sending.</p>
+
+    <h3>Trigger conditions</h3>
+    <ul>
+      <li>Message is 15–25 words (short enough to be underspecified, long enough to be intentional)</li>
+      <li>Message matches a pattern in <code>CLARIFY_TRIGGERS</code></li>
+      <li>No prior messages exist in the conversation</li>
+    </ul>
+
+    <h3>Resolution</h3>
+    <p>When the user selects an option, the answer is appended to the original message in brackets — e.g. <em>"Build me a login form [What platform/stack?: React]"</em> — and <code>sendMessage()</code> fires with the enriched text. The clarify bar is also dismissible without selecting an option.</p>
+  </section>
+
+  <!-- GOOGLE -->
+  <section id="google">
+    <h2>Google Sign-In</h2>
+    <p>Google OAuth is used exclusively for chat history sync to Drive. The OAuth flow uses the implicit grant (token endpoint) rather than the full server-side code exchange, keeping everything client-side.</p>
+
+    <h3>Scope</h3>
+    <pre>https://www.googleapis.com/auth/drive.file  <span class="com">// only files created by this app</span>
+email
+profile</pre>
+
+    <p>The <code>drive.file</code> scope means Atlas can only read and write files it created — it cannot browse the user's entire Drive.</p>
+
+    <h3>Token storage</h3>
+    <p>The access token and its expiry timestamp are stored in <code>S.google.accessToken</code> and <code>S.google.tokenExpiry</code> via <code>_gPersist()</code>, which writes them to <code>SafeStorage</code>. On page load, <code>initSecureStorage()</code> restores the token if it's still valid. The token is validated with a 30-second grace period: <code>Date.now() &lt; tokenExpiry - 30000</code>.</p>
+
+    <h3>Sign-in UI</h3>
+    <p>The Google Sign-In section in Settings shows a single button. After sign-in it shows the user's name, avatar, and a <strong>Sync now</strong> / <strong>Sign out</strong> row.</p>
+    <p>The sidebar footer updates dynamically: when signed in, it shows a Google account card with avatar and "Chats saved to Drive". When signed out, it shows the API key status dot.</p>
+  </section>
+
+  <!-- DRIVE SYNC -->
+  <section id="drive-sync">
+    <h2>Drive Chat History Sync</h2>
+    <p>Chat history is synced to a single file named <code>atlas-chat-history.json</code> in the user's Google Drive. The sync is fully automatic — no manual action required.</p>
+
+    <h3>Sync triggers</h3>
+    <ul>
+      <li><strong>Automatic:</strong> Every call to <code>persist()</code> schedules a debounced sync via <code>_scheduleSync()</code> (3-second delay). This means every new message, edit, or settings change triggers a sync silently.</li>
+      <li><strong>Manual:</strong> The <strong>☁ Sync now</strong> button in Settings calls <code>gDriveSyncNow()</code> (an alias for <code>syncChatsToDrive(false)</code>) and shows a toast on completion.</li>
+      <li><strong>On sign-in:</strong> <code>_restoreChatsFromDrive()</code> fetches the Drive file and merges it with local conversations. Drive conversations win on ID conflict.</li>
+    </ul>
+
+    <h3>File format</h3>
+    <pre>{
+  <span class="str">"version"</span>: <span class="num">2</span>,
+  <span class="str">"exportedAt"</span>: <span class="str">"2025-05-10T..."</span>,
+  <span class="str">"convs"</span>: [ <span class="com">/* array of conversation objects */</span> ]
+}</pre>
+
+    <h3>Merge strategy</h3>
+    <p>On restore, both local and Drive conversation sets are loaded. They are merged by ID: if a conversation exists in both, the Drive version wins. New conversations from Drive that don't exist locally are added. The merged set is saved back to IndexedDB and the sidebar re-renders.</p>
+  </section>
+
+  <!-- LOCAL MODEL -->
+  <section id="local-model">
+    <h2>Local Model (WebGPU)</h2>
+    <p><code>LocalModelManager</code> manages downloading, caching, and running small open-source LLMs entirely in the browser using <a href="https://github.com/mlc-ai/web-llm">WebLLM</a> and the WebGPU API.</p>
+
+    <h3>Supported models</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Model ID</th><th>Label</th><th>Size</th><th>Notes</th></tr>
+        <tr><td><code>TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC</code></td><td>TinyLlama 1.1B</td><td>638 MB</td><td>Fastest, least capable</td></tr>
+        <tr><td><code>SmolLM2-1.7B-Instruct-q4f16_1-MLC</code></td><td>SmolLM2 1.7B</td><td>980 MB</td><td>Good balance</td></tr>
+        <tr><td><code>gemma-2-2b-it-q4f16_1-MLC</code></td><td>Gemma 2B</td><td>1.2 GB</td><td>Best quality</td></tr>
+      </table>
+    </div>
+
+    <h3>Download flow</h3>
+    <div class="flow">
+      <div><span class="node">1. _waitForWebLLM()</span> <span class="arrow">→</span> waits for <span class="str">webllm-ready</span> event (ESM load)</div>
+      <div><span class="node">2. new webllm.MLCEngine()</span></div>
+      <div><span class="node">3. engine.setInitProgressCallback(cb)</span> <span class="arrow">←</span> <span class="com">must be called before reload()</span></div>
+      <div><span class="node">4. engine.reload(modelId)</span> <span class="arrow">→</span> downloads weights to browser cache (OPFS/IndexedDB)</div>
+      <div><span class="node">5. _parseProgress(report)</span> <span class="arrow">→</span> extracts [N/M] fraction from report.text for download phase</div>
+      <div><span class="node">6. Mark downloaded</span> <span class="arrow">→</span> localStorage <span class="str">atlas-local-model-downloaded</span></div>
+    </div>
+
+    <h3>Progress parsing</h3>
+    <p>WebLLM v0.2.x reports progress in two phases with different data shapes:</p>
+    <ul>
+      <li><strong>Download phase:</strong> <code>report.progress === 0</code>; progress is embedded in <code>report.text</code> as <code>[N/M]</code> e.g. <em>"Fetching param cache[23/158]: 14.56 MB fetched"</em></li>
+      <li><strong>Init phase:</strong> <code>report.progress</code> is a float 0→1</li>
+    </ul>
+    <p><code>_parseProgress(report)</code> handles both cases and always returns <code>{pct: 0-100, label: string}</code>.</p>
+
+    <h3>Inference flow</h3>
+    <pre>generateResponse(messages, onToken)
+  → _waitForWebLLM()
+  → engine.setInitProgressCallback(cb)   <span class="com">// if engine needs loading</span>
+  → engine.reload(modelId)               <span class="com">// no-op if already loaded</span>
+  → engine.chat.completions.create({stream: true})
+  → for await (chunk of stream) → onToken(delta)</pre>
+
+    <h3>Fallback routing in sendMessage()</h3>
+    <div class="flow">
+      <div><span class="node">activeKey resolved?</span></div>
+      <div>&nbsp;&nbsp;<span class="yes">yes</span> <span class="arrow">→</span> normal cloud path</div>
+      <div>&nbsp;&nbsp;<span class="no">no key</span> <span class="arrow">→</span> <span class="node">fallbackEnabledButNotDownloaded()?</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="yes">yes</span> <span class="arrow">→</span> toast + openSettings()</div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="no">no</span> <span class="arrow">→</span> <span class="node">shouldUseFallback()?</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="yes">yes</span> <span class="arrow">→</span> _sendWithLocalModel(text)</div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="no">no</span> <span class="arrow">→</span> openKeyModal()</div>
+    </div>
+
+    <h3>localStorage keys</h3>
+    <div class="kv">
+      <span class="kv-key">atlas-local-model</span><span class="kv-val">Selected model ID string</span>
+      <span class="kv-key">atlas-fallback-enabled</span><span class="kv-val">"true" | "false"</span>
+      <span class="kv-key">atlas-local-model-downloaded</span><span class="kv-val">JSON array of downloaded model IDs</span>
+    </div>
+  </section>
+
+  <!-- WEB SEARCH -->
+  <section id="web-search">
+    <h2>Web Search</h2>
+    <p>Toggled via the 🔍 icon. When active, Atlas sends the <code>web_search</code> plugin parameter to OpenRouter, enabling models to search the web during generation. Only available with OpenRouter. The toggle is hidden for other providers.</p>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings">
+    <h2>Settings Panel</h2>
+    <p>The Settings modal (<code>#settings-modal</code>) is opened by <code>openSettings()</code> and saved by <code>saveSettings()</code>. On open, three init functions are called: <code>LocalModelManager.initSettingsUI()</code>, <code>aksInit()</code>, and <code>_gUpdateUI()</code>.</p>
+
+    <h3>Sections</h3>
+    <ul>
+      <li><strong>Model parameters</strong> — temperature, max tokens, top-p</li>
+      <li><strong>Google Sign-In</strong> — sign in/out, manual sync trigger</li>
+      <li><strong>API Keys</strong> — tabbed inline key entry for all 5 providers</li>
+      <li><strong>System Prompt</strong> — global default system prompt + 4 presets (Smart, Concise, Technical, Clear)</li>
+      <li><strong>Output & Style</strong> — font family, font size, chat density, image gen model/size</li>
+      <li><strong>Budget</strong> — spending cap in USD</li>
+      <li><strong>Storage</strong> — usage stats, export/import JSON, clear all data, key persistence toggle</li>
+      <li><strong>Skills</strong> — manage built-in and custom skills</li>
+      <li><strong>Local Model</strong> — enable fallback, select model, download with progress</li>
+    </ul>
+  </section>
+
+  <!-- SIDEBAR -->
+  <section id="sidebar">
+    <h2>Sidebar &amp; Conversations</h2>
+    <p>The sidebar lists all conversations from <code>S.convs</code>. On mobile it's a drawer toggled by the ☰ button; on desktop it's always visible and can be collapsed.</p>
+
+    <h3>Conversation lifecycle</h3>
+    <ul>
+      <li><strong>New chat</strong> — <code>newChat()</code> creates a UUID, adds it to <code>S.convs</code>, saves to IndexedDB, and resets the message view.</li>
+      <li><strong>Switch</strong> — <code>loadConv(id)</code> loads the conversation from <code>S.convs</code>, restores <code>S.msgs</code> and <code>S.codeStore</code>, and re-renders the chat.</li>
+      <li><strong>Auto-title</strong> — After the first AI response, the first 50 characters of the user's message become the conversation title.</li>
+      <li><strong>Delete</strong> — Removes from <code>S.convs</code>, deletes from IndexedDB, and re-renders the sidebar.</li>
+    </ul>
+
+    <h3>Search</h3>
+    <p><code>filterConvs(query)</code> filters the sidebar list in real-time by conversation title. Case-insensitive substring match.</p>
+
+    <h3>Right message nav</h3>
+    <p>A fixed-position panel on the right edge of the chat (DeepSeek-style) shows a compact list of all messages in the current conversation. Clicking a message scrolls to it. Shows role label and a 60-character snippet.</p>
+  </section>
+
+  <!-- MARKDOWN -->
+  <section id="markdown">
+    <h2>Markdown Renderer</h2>
+    <p><code>parseMarkdown(text)</code> converts AI responses to HTML. It is a custom renderer (not a library) built for performance and Atlas-specific behaviour.</p>
+
+    <h3>What it handles</h3>
+    <ul>
+      <li><strong>Code blocks</strong> — fenced with language tag; registered in <code>S.codeStore</code> with a blockId; rendered with a Copy button and a Preview button (for html/js/css blocks)</li>
+      <li><strong>Inline code</strong> — backtick spans</li>
+      <li><strong>Bold, italic, strikethrough</strong></li>
+      <li><strong>Headers</strong> h1–h6</li>
+      <li><strong>Unordered and ordered lists</strong> — including nested</li>
+      <li><strong>Tables</strong> — GFM-style pipe tables</li>
+      <li><strong>Blockquotes</strong></li>
+      <li><strong>Horizontal rules</strong></li>
+      <li><strong>Links</strong> — opened in new tab with <code>rel="noopener"</code></li>
+      <li><strong>KaTeX math</strong> — <code>$inline$</code> and <code>$$block$$</code>, loaded on demand</li>
+      <li><strong>Syntax highlighting</strong> — Highlight.js, loaded on demand</li>
+    </ul>
+
+    <p>Output is passed through DOMPurify before being inserted into the DOM.</p>
+  </section>
+
+  <!-- THEME -->
+  <section id="theme">
+    <h2>Themes &amp; Fonts</h2>
+
+    <h3>Themes</h3>
+    <p>Two themes: <code>dark</code> (default) and <code>light</code>. Toggled by <code>setTheme(t)</code>. The <code>data-theme</code> attribute on <code>&lt;body&gt;</code> switches the full CSS variable set.</p>
+
+    <h3>Fonts</h3>
+    <p>Five font options: DM Sans (default), Inter, Merriweather, JetBrains Mono, and System. Applied via <code>applyFont(family, size)</code>. Font size range: 12–20px.</p>
+
+    <h3>Chat density</h3>
+    <p>Three density modes: <code>comfortable</code> (default), <code>compact</code>, and <code>spacious</code>. Controls message bubble padding and line height via a CSS class on <code>#chat-area</code>.</p>
+  </section>
+
+  <!-- API KEYS UI -->
+  <section id="api-keys-ui">
+    <h2>API Key UI (Inline Settings)</h2>
+    <p>The popup-based key entry modal has been replaced by an inline section within Settings. The key functions are:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Function</th><th>Description</th></tr>
+        <tr><td><code>aksSwitch(prov, btn)</code></td><td>Switches the active provider tab, loads masked existing key from KeyStore</td></tr>
+        <tr><td><code>aksSaveKey()</code></td><td>Saves the entered key to KeyStore + S, switches S.provider, reloads models</td></tr>
+        <tr><td><code>aksClearKey()</code></td><td>Removes the key for the active provider from storage</td></tr>
+        <tr><td><code>aksInit()</code></td><td>Called on Settings open — syncs all tab states to current key presence</td></tr>
+        <tr><td><code>_updateSidebarFooter()</code></td><td>Syncs sidebar footer between Google card and key status dot</td></tr>
+        <tr><td><code>_akdClick()</code></td><td>Sidebar footer click handler — opens Settings and scrolls to the right section</td></tr>
+        <tr><td><code>openKeyModal()</code></td><td>Kept as a no-popup redirect — opens Settings + scrolls to API Keys section</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- S OBJECT REFERENCE -->
+  <section id="s-object">
+    <h2>S Object Quick Reference</h2>
+    <p>All fields on the global <code>S</code> object. Fields marked 🔒 are never written to localStorage.</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>key</code> 🔒</td><td>string</td><td>''</td><td>OpenRouter API key (in-memory only)</td></tr>
+        <tr><td><code>deepseekKey</code> 🔒</td><td>string</td><td>''</td><td>DeepSeek key</td></tr>
+        <tr><td><code>geminiKey</code> 🔒</td><td>string</td><td>''</td><td>Gemini key</td></tr>
+        <tr><td><code>openaiKey</code> 🔒</td><td>string</td><td>''</td><td>OpenAI key</td></tr>
+        <tr><td><code>localBaseUrl</code></td><td>string</td><td>'http://localhost:11434'</td><td>Local AI server URL</td></tr>
+        <tr><td><code>localKey</code> 🔒</td><td>string</td><td>''</td><td>Optional bearer token for local server</td></tr>
+        <tr><td><code>provider</code></td><td>string</td><td>'openrouter'</td><td>Active provider ID</td></tr>
+        <tr><td><code>model</code></td><td>object|null</td><td>null</td><td>Selected model {id, name, context_length, pricing}</td></tr>
+        <tr><td><code>allModels</code></td><td>array</td><td>[]</td><td>All fetched models</td></tr>
+        <tr><td><code>filtModels</code></td><td>array</td><td>[]</td><td>Currently filtered models</td></tr>
+        <tr><td><code>favModels</code></td><td>array</td><td>[]</td><td>Pinned model IDs</td></tr>
+        <tr><td><code>convs</code></td><td>array</td><td>[]</td><td>All conversations</td></tr>
+        <tr><td><code>chatId</code></td><td>string|null</td><td>null</td><td>Active conversation ID</td></tr>
+        <tr><td><code>msgs</code></td><td>array</td><td>[]</td><td>Messages in active conversation</td></tr>
+        <tr><td><code>files</code></td><td>array</td><td>[]</td><td>Attached files for next message</td></tr>
+        <tr><td><code>totalCost</code></td><td>number</td><td>0</td><td>Cumulative session cost USD</td></tr>
+        <tr><td><code>budget</code></td><td>number</td><td>0</td><td>Spending cap (0 = none)</td></tr>
+        <tr><td><code>cfg</code></td><td>object</td><td>see below</td><td>User config</td></tr>
+        <tr><td><code>streaming</code></td><td>boolean</td><td>false</td><td>True while streaming</td></tr>
+        <tr><td><code>ac</code></td><td>AbortController|null</td><td>null</td><td>Current stream abort controller</td></tr>
+        <tr><td><code>sbOpen</code></td><td>boolean</td><td>true</td><td>Sidebar visible</td></tr>
+        <tr><td><code>theme</code></td><td>string</td><td>'dark'</td><td>'dark' | 'light'</td></tr>
+        <tr><td><code>imageGenMode</code></td><td>boolean</td><td>false</td><td>Image generation active</td></tr>
+        <tr><td><code>webSearchMode</code></td><td>boolean</td><td>false</td><td>Web search plugin active</td></tr>
+        <tr><td><code>outputFmt</code></td><td>string|null</td><td>null</td><td>Active output format</td></tr>
+        <tr><td><code>codeStore</code></td><td>Map</td><td>new Map()</td><td>blockId → {lang, content}</td></tr>
+        <tr><td><code>toolDefinitions</code></td><td>array</td><td>[]</td><td>Tool schemas for API</td></tr>
+        <tr><td><code>google</code></td><td>object</td><td>see Google</td><td>OAuth state</td></tr>
+      </table>
+    </div>
+
+    <h4>S.cfg defaults</h4>
+    <div class="kv">
+      <span class="kv-key">temp</span><span class="kv-val">0.55</span>
+      <span class="kv-key">maxTok</span><span class="kv-val">4096</span>
+      <span class="kv-key">topP</span><span class="kv-val">0.95</span>
+      <span class="kv-key">imgSize</span><span class="kv-val">'1024x1024'</span>
+      <span class="kv-key">imgModel</span><span class="kv-val">'' (first IMAGE_GEN_MODELS entry)</span>
+      <span class="kv-key">donts</span><span class="kv-val">'' (custom negative instructions)</span>
+      <span class="kv-key">font</span><span class="kv-val">'DM Sans'</span>
+      <span class="kv-key">fontSize</span><span class="kv-val">14</span>
+      <span class="kv-key">smartPatch</span><span class="kv-val">true</span>
+      <span class="kv-key">globalSysPrompt</span><span class="kv-val">'' (SYSTEM_PROMPT_PRESETS.smart on first run)</span>
+      <span class="kv-key">chatDensity</span><span class="kv-val">null ('comfortable')</span>
+      <span class="kv-key">budget</span><span class="kv-val">0</span>
+    </div>
+  </section>
+
+  <!-- KEY FUNCTIONS -->
+  <section id="functions">
+    <h2>Key Functions Reference</h2>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Function</th><th>Section</th><th>Description</th></tr>
+        <tr><td><code>initSecureStorage()</code></td><td>PERSISTENCE</td><td>Master init: opens IDB, loads convs, keys, settings, Google token</td></tr>
+        <tr><td><code>persist()</code></td><td>PERSISTENCE</td><td>Serialises S to SafeStorage; schedules Drive sync</td></tr>
+        <tr><td><code>sendMessage()</code></td><td>SEND MESSAGE</td><td>Main dispatch: validates, enriches, calls API</td></tr>
+        <tr><td><code>callApi(msgs, onTok)</code></td><td>API CALLS</td><td>Streaming API call for all non-Gemini providers</td></tr>
+        <tr><td><code>buildApiMsgs()</code></td><td>MESSAGE BUILDING</td><td>Assembles history-capped message array</td></tr>
+        <tr><td><code>previewCode(id)</code></td><td>ARTIFACT PANEL</td><td>Opens/updates artifact panel for a code block</td></tr>
+        <tr><td><code>parseMarkdown(text)</code></td><td>MARKDOWN</td><td>Custom markdown → HTML with code block registration</td></tr>
+        <tr><td><code>reloadModels()</code></td><td>MODEL SELECTOR</td><td>Fetches model list from active provider</td></tr>
+        <tr><td><code>openSettings()</code></td><td>SETTINGS</td><td>Opens settings modal, runs aksInit + _gUpdateUI + LocalModelManager.initSettingsUI</td></tr>
+        <tr><td><code>saveSettings()</code></td><td>SETTINGS</td><td>Reads all settings fields, writes to S.cfg, calls persist()</td></tr>
+        <tr><td><code>newChat()</code></td><td>SIDEBAR</td><td>Creates new conversation, persists, resets view</td></tr>
+        <tr><td><code>loadConv(id)</code></td><td>SIDEBAR</td><td>Switches active conversation, restores state</td></tr>
+        <tr><td><code>syncChatsToDrive(silent)</code></td><td>DRIVE BACKUP</td><td>Uploads all conversations to Drive JSON file</td></tr>
+        <tr><td><code>_restoreChatsFromDrive()</code></td><td>DRIVE BACKUP</td><td>Downloads and merges Drive conversations on sign-in</td></tr>
+        <tr><td><code>googleSignIn()</code></td><td>GOOGLE OAUTH</td><td>Opens OAuth popup, stores token, triggers restore</td></tr>
+        <tr><td><code>googleSignOut()</code></td><td>GOOGLE OAUTH</td><td>Clears token, updates UI</td></tr>
+        <tr><td><code>LocalModelManager.downloadSelected()</code></td><td>LOCAL MODEL</td><td>Downloads selected model to browser cache with progress</td></tr>
+        <tr><td><code>LocalModelManager.generateResponse(msgs, cb)</code></td><td>LOCAL MODEL</td><td>Runs inference on downloaded model, streams tokens</td></tr>
+        <tr><td><code>_sendWithLocalModel(text)</code></td><td>LOCAL MODEL</td><td>Full send/stream/render cycle using local model</td></tr>
+        <tr><td><code>toast(msg, type)</code></td><td>TOAST</td><td>Shows a dismissible toast. type: 'ok' | 'er' | 'warn'</td></tr>
+        <tr><td><code>isEditIntent(text)</code></td><td>PATCH EDIT</td><td>Returns true if text looks like a code edit request</td></tr>
+        <tr><td><code>applyPresetPrompt(key)</code></td><td>SYSTEM PROMPT</td><td>Loads a preset from SYSTEM_PROMPT_PRESETS into the settings textarea</td></tr>
+        <tr><td><code>exportAllData()</code></td><td>PERSISTENCE</td><td>Downloads all conversations as JSON (no keys)</td></tr>
+        <tr><td><code>importAllData()</code></td><td>PERSISTENCE</td><td>Imports conversations from a JSON file with merge preview</td></tr>
+        <tr><td><code>clearAllDataConfirm()</code></td><td>PERSISTENCE</td><td>Clears IDB, SafeStorage, and session keys with confirmation</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- CSS VARS -->
+  <section id="css-vars">
+    <h2>CSS Variables</h2>
+
+    <h3>Dark theme (default)</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Variable</th><th>Value</th><th>Usage</th></tr>
+        <tr><td><code>--bg</code></td><td>#0d0d14</td><td>App background</td></tr>
+        <tr><td><code>--bg2</code></td><td>#13131f</td><td>Sidebar, secondary panels</td></tr>
+        <tr><td><code>--surf</code></td><td>#1a1a2a</td><td>Cards, inputs, surfaces</td></tr>
+        <tr><td><code>--elev</code></td><td>#202033</td><td>Elevated elements, chips</td></tr>
+        <tr><td><code>--hov</code></td><td>#252538</td><td>Hover states</td></tr>
+        <tr><td><code>--bdr</code></td><td>rgba(255,255,255,.08)</td><td>Borders everywhere</td></tr>
+        <tr><td><code>--acc</code></td><td>#7c6aff</td><td>Primary accent (purple)</td></tr>
+        <tr><td><code>--acc2</code></td><td>#9d8fff</td><td>Secondary accent, links</td></tr>
+        <tr><td><code>--grn</code></td><td>#2dd4a0</td><td>Success, connected, ready</td></tr>
+        <tr><td><code>--amb</code></td><td>#f5a623</td><td>Warning, loading</td></tr>
+        <tr><td><code>--red</code></td><td>#ff5f6d</td><td>Error, destructive</td></tr>
+        <tr><td><code>--tx1</code></td><td>#e8e8f5</td><td>Primary text</td></tr>
+        <tr><td><code>--tx2</code></td><td>#a0a0bc</td><td>Secondary text</td></tr>
+        <tr><td><code>--tx3</code></td><td>#5a5a72</td><td>Placeholder, labels</td></tr>
+        <tr><td><code>--rs</code></td><td>8px</td><td>Border radius (small)</td></tr>
+        <tr><td><code>--rx</code></td><td>6px</td><td>Border radius (input)</td></tr>
+      </table>
+    </div>
+
+    <p>Light theme overrides all of these via <code>[data-theme="light"]</code> selectors in atlas.css.</p>
+  </section>
+
+  <!-- DATA FORMATS -->
+  <section id="data-formats">
+    <h2>Data Formats</h2>
+
+    <h3>Conversation record (IndexedDB)</h3>
+    <pre>{
+  id:         <span class="str">"uuid-v4"</span>,
+  title:      <span class="str">"First 50 chars of first user message"</span>,
+  msgs: [{
+    role:      <span class="str">"user"</span> | <span class="str">"assistant"</span>,
+    content:   <span class="str">string</span> | <span class="str">array</span>,
+    iTok:      <span class="num">number</span>,
+    oTok:      <span class="num">number</span>,
+    cost:      <span class="num">number</span>,
+    files:     [{ name, type }],
+    imageResult: { prompt, images: [{ url }] } | <span class="kw">null</span>,
+    toolCalls:   [{ id, function: { name, arguments } }] | <span class="kw">null</span>,
+    toolResults: <span class="str">array</span> | <span class="kw">null</span>,
+  }],
+  codeStore:  [[ <span class="str">"blockId"</span>, { lang, content } ]],  <span class="com">// Map entries serialised</span>
+}</pre>
+
+    <h3>Patch format</h3>
+    <pre>```patch
+&lt;&lt;&lt;&lt; FIND
+&lt;original lines to find&gt;
+====
+&lt;replacement lines&gt;
+&gt;&gt;&gt;&gt; REPLACE
+```</pre>
+
+    <h3>Output format JSON — PDF example</h3>
+    <pre>```pdf-content
+{
+  "title": "Report Title",
+  "author": "Optional Author",
+  "sections": [
+    {
+      "heading": "Introduction",
+      "body": "Paragraph text here.",
+      "bullet_points": ["Point A", "Point B"]
+    }
+  ],
+  "footer": "Page footer text"
+}
+```</pre>
+
+    <h3>Drive backup file</h3>
+    <pre>{
+  "version": 2,
+  "exportedAt": "ISO-8601 timestamp",
+  "convs": [ <span class="com">/* array of conversation records */</span> ]
+}</pre>
+  </section>
+
+  <!-- LOCALSTORAGE KEYS -->
+  <section id="local-storage-keys">
+    <h2>localStorage Keys</h2>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Key</th><th>Owner</th><th>Content</th></tr>
+        <tr><td><code>atlas_v1</code></td><td>SafeStorage</td><td>JSON: S.cfg, S.provider, S.model, S.theme, S.sbOpen, S.favModels, S.totalCost, S.budget</td></tr>
+        <tr><td><code>atlas_google_v1</code></td><td>_gPersist</td><td>JSON: {accessToken, tokenExpiry, user, _lastSync}</td></tr>
+        <tr><td><code>atlas-local-model</code></td><td>LocalModelManager</td><td>Selected model ID string</td></tr>
+        <tr><td><code>atlas-fallback-enabled</code></td><td>LocalModelManager</td><td>"true" | "false"</td></tr>
+        <tr><td><code>atlas-local-model-downloaded</code></td><td>LocalModelManager</td><td>JSON array of downloaded model ID strings</td></tr>
+        <tr><td><code>atlas_key_sess_openrouter</code></td><td>KeyStore (fallback)</td><td>OpenRouter key (sessionStorage only, not localStorage)</td></tr>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-icon">⚠️</span>
+      <div class="callout-body"><strong>API keys are never in localStorage.</strong> KeyStore uses the Credential Management API first. If unavailable, keys fall back to <code>sessionStorage</code> (not localStorage) so they clear when the tab closes.</div>
+    </div>
+
+    <h3>IndexedDB</h3>
+    <div class="kv">
+      <span class="kv-key">Database name</span><span class="kv-val"><code>atlas_db</code> version 2</span>
+      <span class="kv-key">Object store</span><span class="kv-val"><code>conversations</code> (keyPath: <code>id</code>)</span>
+    </div>
+  </section>
+
+
+  <!-- FILE ATTACHMENTS -->
+  <section id="file-attachments">
+    <h2>File Attachments</h2>
+    <p>Users can attach files to any message. Files are read into memory using <code>FileReader</code> and sent as multi-part content to the API.</p>
+
+    <h3>Supported file types</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Type</th><th>Sent as</th><th>Icon</th><th>Notes</th></tr>
+        <tr><td>Images (jpg, png, gif, webp)</td><td>base64 data URL</td><td>🖼️</td><td>Sent as <code>image_url</code> content part; supports vision models</td></tr>
+        <tr><td>PDF</td><td>base64 data URL</td><td>📄</td><td>Sent as <code>document</code> content part where supported</td></tr>
+        <tr><td>CSV</td><td>plain text</td><td>📊</td><td>Included as text block in the message</td></tr>
+        <tr><td>JSON</td><td>plain text</td><td>📋</td><td>Included as text block in the message</td></tr>
+        <tr><td>Text files (.txt, .md, .js, etc.)</td><td>plain text</td><td>📝</td><td>Included as text block</td></tr>
+      </table>
+    </div>
+
+    <h3>Attachment lifecycle</h3>
+    <ol>
+      <li>User clicks the 📎 button or drags a file into the input area, or pastes an image from the clipboard.</li>
+      <li><code>attachFiles(fileList)</code> reads each file with <code>readFile()</code> and pushes to <code>S.files</code>.</li>
+      <li>Chips appear in the <code>#attached-files</code> bar above the input showing filename, type icon, and size.</li>
+      <li>On send, <code>buildApiMsgs()</code> converts <code>S.files</code> entries into the correct content part format for the active provider.</li>
+      <li><code>S.files</code> is cleared after the message is sent.</li>
+    </ol>
+
+    <h3>Clipboard paste</h3>
+    <p>A global <code>paste</code> event listener intercepts clipboard images and calls <code>attachFiles()</code> automatically. Text pastes are not intercepted and go into the textarea normally.</p>
+
+    <h3>Storage note</h3>
+    <p>File contents are stored in messages as base64 strings (<code>m.files[].data</code>) in IndexedDB. Images and PDFs can be large — the message save function strips image data from persisted messages to keep IndexedDB size manageable, keeping only <code>{name, type}</code> metadata.</p>
+  </section>
+
+  <!-- FILE GENERATORS -->
+  <section id="file-generators">
+    <h2>File Generation</h2>
+    <p>When the AI returns a fenced block with a format tag (<code>pdf-content</code>, <code>docx-content</code>, <code>pptx-content</code>), the renderer shows a download button instead of a code preview. Clicking it calls the appropriate generator.</p>
+
+    <h3>Lazy loading</h3>
+    <p>All generator libraries are loaded on first use via <code>loadScript(src)</code>, which injects a <code>&lt;script&gt;</code> tag and returns a Promise. The browser caches them after the first load.</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Format</th><th>Function</th><th>Library</th><th>CDN URL</th></tr>
+        <tr><td>PDF</td><td><code>generatePDF(jsonStr, filename)</code></td><td>jsPDF 2.5.1</td><td>cdnjs.cloudflare.com</td></tr>
+        <tr><td>DOCX</td><td><code>generateDOCX(jsonStr, filename)</code></td><td>docx.js</td><td>cdnjs.cloudflare.com</td></tr>
+        <tr><td>PPTX</td><td><code>generatePPTX(jsonStr, filename)</code></td><td>pptxgenjs</td><td>cdnjs.cloudflare.com</td></tr>
+        <tr><td>CSS</td><td><code>generateCSS(cssStr, filename)</code></td><td>None (plain Blob)</td><td>—</td></tr>
+      </table>
+    </div>
+
+    <h3>JSON parsing</h3>
+    <p><code>parseModelJSON(raw)</code> defensively extracts the JSON object from the model's raw output. It strips markdown fences the model may have added inside the block, then finds the first <code>{</code> and last <code>}</code> to extract the JSON regardless of any surrounding prose.</p>
+
+    <h3>PDF generation details</h3>
+    <p>The PDF generator uses jsPDF in millimetre mode. Page setup (size, orientation, margins) can be set in <code>_vePageSetup</code> from the visual editor. It renders title, optional author, a decorative rule, section headings, body paragraphs, and bullet lists. Page overflow is handled by <code>checkPage(need)</code> which adds a new page when less than <code>need</code> mm remain.</p>
+
+    <h3>PPTX generation details</h3>
+    <p>The PPTX generator uses pptxgenjs. Each slide in the JSON array becomes a slide object with title, optional body text, and optional bullet points. Speaker notes are added to the slide's notes pane. A consistent theme (background, accent colour, font family) is applied from the visual editor's current state if available.</p>
+
+    <h3>DOCX generation details</h3>
+    <p>The DOCX generator uses docx.js. Section headings become <code>Heading1</code> paragraphs. Body text becomes normal paragraphs. Bullet lists become list items. The output is a valid <code>.docx</code> file downloadable by the browser via an object URL.</p>
+  </section>
+
+  <!-- HTML STRUCTURE -->
+  <section id="html-structure">
+    <h2>HTML Structure</h2>
+    <p>All element IDs and their purpose. The entire UI is built from these elements — atlas.js never creates new top-level DOM elements, only populates them.</p>
+
+    <h3>Top-level structure</h3>
+    <pre>#app
+  #origin-banner          ← file:// protocol warning
+  #sov                    ← sidebar overlay (mobile tap-to-close)
+  #sidebar
+    .sb-hd                ← sidebar header (logo, new chat button)
+    #conv-search-wrap     ← conversation search input
+    #chatlist             ← rendered conversation list
+    .sb-ft                ← sidebar footer
+      #sb-google-signed-in ← Google account card (hidden when signed out)
+      #akd-area           ← API key status dot + text
+  #main
+    #topbar
+      #msw                ← model selector widget
+        #msbtn            ← model selector button
+        #mdd              ← model dropdown panel
+      #cost-tracker       ← session cost display
+      #sec-status-btn     ← storage security indicator
+      #local-model-indicator ← "🖥️ Local model" pill (local inference)
+    #ctx-bar              ← context window fill bar
+    #chat-area            ← message bubbles
+      #welcome-static     ← empty state placeholder
+    #input-zone
+      #sys-bar            ← system prompt toggle + textarea
+      #attached-files     ← file attachment chips
+      #fmt-bar            ← output format selector chips
+      #clarify-bar        ← clarifying question chips
+      #active-skill-pill  ← active skill indicator
+      #detected-intent-pill ← auto-detected intent suggestion
+      #input-box          ← textarea + action buttons
+  #artifact-panel         ← right-side artifact viewer
+    #artifact-hdr         ← title, tabs, action buttons
+    #artifact-tabs        ← tab strip
+    #artifact-body        ← iframe or source view
+  #settings-modal         ← settings overlay
+  #msg-nav-panel          ← right message navigation panel
+  Various modal overlays  ← skill editor, tool confirm, debug panel</pre>
+
+    <h3>Dynamic elements</h3>
+    <p>Message bubbles are created by <code>appendMsgEl(m)</code> and assigned IDs like <code>bubble-0</code>, <code>bubble-1</code>, etc. The message nav panel is populated by <code>renderMsgNav()</code> whenever the message list changes.</p>
+  </section>
+
+  <!-- COST DETAIL -->
+  <section id="cost-detail">
+    <h2>Cost Calculation</h2>
+    <p>Cost tracking uses per-token pricing from the model object. All costs are in USD.</p>
+
+    <h3>Formula</h3>
+    <pre>cost = iTok × model.pricing.prompt + oTok × model.pricing.completion</pre>
+    <p>Pricing values are stored as USD per token (not per million). OpenRouter's <code>/models</code> endpoint returns them in this format directly.</p>
+
+    <h3>Free providers</h3>
+    <ul>
+      <li><strong>Gemini (AI Studio key):</strong> All models show "Free*" unless <code>S.cfg.geminiTrackCost</code> is true. The free tier covers generous daily quotas — cost tracking is disabled by default since users won't be billed.</li>
+      <li><strong>Local provider:</strong> Always shows "Local" — no API billing.</li>
+      <li><strong>Local model (WebGPU):</strong> No cost shown — inference runs on the user's GPU.</li>
+    </ul>
+
+    <h3>Pre-send estimate</h3>
+    <p><code>updateEst()</code> fires on every keystroke in the input textarea. It estimates token count as <code>Math.ceil(text.length / 4)</code> (4 chars ≈ 1 token) and shows the estimated input cost below the input box.</p>
+
+    <h3>Budget enforcement</h3>
+    <p>If <code>S.budget > 0</code> and <code>S.totalCost >= S.budget</code>, <code>sendMessage()</code> blocks the send and shows a warning toast. The budget bar in the topbar fills proportionally and changes colour at 60% (amber) and 90% (red).</p>
+  </section>
+
+  <!-- SECURITY -->
+  <section id="security">
+    <h2>Security Model</h2>
+
+    <h3>API key storage tiers</h3>
+    <p>Keys are stored using a preference-ordered fallback:</p>
+    <ol>
+      <li><strong>Credential Management API</strong> — Browser-managed, persists across sessions, not accessible via JavaScript after storage. Best security. Shown as "🔒 Secure" in the topbar.</li>
+      <li><strong>SessionStorage</strong> — In-memory per tab, cleared on close. Used when Credential API is unavailable (Firefox, some Safari configs). Shown as "⚠ Session only".</li>
+      <li><strong>None</strong> — Key not stored. User must re-enter on next visit.</li>
+    </ol>
+    <p>Keys are <strong>never</strong> written to <code>localStorage</code>, <code>S</code> serialisation, Drive backup, or export files.</p>
+
+    <h3>Content sanitisation</h3>
+    <p>All AI-generated HTML is passed through DOMPurify before being inserted into the DOM via <code>innerHTML</code>. This prevents XSS from malicious model outputs.</p>
+
+    <h3>Artifact sandbox</h3>
+    <p>Artifacts are rendered in <code>&lt;iframe&gt;</code> elements with a <code>sandbox</code> attribute. Scripts inside the artifact cannot access the parent page's DOM or <code>window</code> object.</p>
+
+    <h3>Google OAuth scope minimisation</h3>
+    <p>Only <code>drive.file</code> is requested — the narrowest Drive scope. Atlas cannot read any existing Drive files; only the single <code>atlas-chat-history.json</code> file it creates.</p>
+
+    <h3>No telemetry</h3>
+    <p>Atlas makes no analytics calls, no error reporting calls, and no calls to any Atlas-controlled server. All network traffic goes exclusively to the AI provider API you configure and to Google's APIs if signed in.</p>
+  </section>
+
+  <!-- ADDING A PROVIDER -->
+  <section id="adding-provider">
+    <h2>How To: Add a Provider</h2>
+    <p>To add a new cloud AI provider:</p>
+
+    <ol>
+      <li><strong>Add a key field to S</strong> — e.g. <code>S.mistralKey = ''</code></li>
+      <li><strong>Add a provider ID string</strong> — e.g. <code>'mistral'</code> as a valid value for <code>S.provider</code></li>
+      <li><strong>Update the active key resolver</strong> in <code>sendMessage()</code>:</li>
+    </ol>
+    <pre>const activeKey =
+  S.provider === <span class="str">'mistral'</span> ? S.mistralKey :
+  <span class="com">// ... existing providers</span></pre>
+
+    <ol start="4">
+      <li><strong>Add a model list fetcher</strong> in <code>reloadModels()</code> — handle the <code>'mistral'</code> case, fetch from the provider's models endpoint, normalise to <code>{id, name, context_length, pricing}</code>.</li>
+      <li><strong>Add streaming handler</strong> in <code>callApi()</code> — if the provider uses OpenAI-compatible SSE, only the base URL and auth header need changing. If it uses a different format (like Gemini), add a parallel function.</li>
+      <li><strong>Add key UI</strong> — add a tab button in the API Keys section of <code>index.html</code> and handle it in <code>aksSwitch()</code>.</li>
+      <li><strong>Add to KeyStore</strong> — call <code>KeyStore.saveKey('mistral', val)</code> in <code>aksSaveKey()</code> and <code>KeyStore.loadKey('mistral')</code> in <code>initSecureStorage()</code>.</li>
+    </ol>
+  </section>
+
+  <!-- ADDING A SKILL -->
+  <section id="adding-skill">
+    <h2>How To: Add a Built-in Skill</h2>
+    <p>Built-in skills are defined in the <code>BUILTIN_SKILLS</code> array near the top of atlas.js.</p>
+
+    <pre>BUILTIN_SKILLS.push({
+  id:     <span class="str">'legal'</span>,
+  icon:   <span class="str">'⚖️'</span>,
+  name:   <span class="str">'Legal Writing'</span>,
+  desc:   <span class="str">'Precise, citation-ready legal documents and analysis'</span>,
+  prompt: <span class="str">`Your system prompt here. Be specific about tone,
+structure, and what the model should avoid or prioritise.`</span>
+});</pre>
+
+    <p>To add the skill to the intent auto-detector, add a mapping in the <code>INTENT_MAP</code> object:</p>
+    <pre>INTENT_MAP[<span class="str">'legal'</span>] = [
+  <span class="str">'contract'</span>, <span class="str">'lawsuit'</span>, <span class="str">'clause'</span>, <span class="str">'legal'</span>, <span class="str">'liability'</span>, <span class="str">'statute'</span>
+];</pre>
+    <p>Keywords are matched case-insensitively against the user's input. First match wins.</p>
+  </section>
+
+  <!-- ADDING A TOOL -->
+  <section id="adding-tool">
+    <h2>How To: Add a Tool</h2>
+    <p>Tools are defined in <code>initToolDefinitions()</code> and executed in the tool call handler inside <code>sendMessage()</code>.</p>
+
+    <h4>1. Define the schema</h4>
+    <pre>S.toolDefinitions.push({
+  type: <span class="str">'function'</span>,
+  function: {
+    name:        <span class="str">'get_weather'</span>,
+    description: <span class="str">'Get current weather for a city'</span>,
+    parameters: {
+      type: <span class="str">'object'</span>,
+      properties: {
+        city: { type: <span class="str">'string'</span>, description: <span class="str">'City name'</span> }
+      },
+      required: [<span class="str">'city'</span>]
+    }
+  }
+});</pre>
+
+    <h4>2. Handle execution</h4>
+    <p>In the tool call handler block inside <code>sendMessage()</code>, add a case:</p>
+    <pre><span class="kw">if</span> (name === <span class="str">'get_weather'</span>) {
+  const data = <span class="kw">await</span> fetch(<span class="str">`https://wttr.in/${args.city}?format=j1`</span>);
+  result = { weather: (await data.json()).current_condition[<span class="num">0</span>] };
+}</pre>
+
+    <div class="callout warn">
+      <span class="callout-icon">⚠️</span>
+      <div class="callout-body">Tool schemas are sent with every API request when <code>S.toolDefinitions</code> is non-empty. Keep the total schema size small — each tool adds to the system prompt token count and therefore to cost.</div>
+    </div>
+  </section>
+
+  <!-- DEBUGGING -->
+  <section id="debugging">
+    <h2>Debugging</h2>
+
+    <h3>Debug panel</h3>
+    <p>A built-in debug console is accessible via the <code>?debug=1</code> URL parameter or by calling <code>openDebug()</code> from the browser console. It shows:</p>
+    <ul>
+      <li>The raw API request payload for the last message (full message array, model, temperature)</li>
+      <li>The raw API response (full JSON from the provider)</li>
+      <li>IndexedDB storage stats</li>
+      <li>Current <code>S</code> object snapshot (keys redacted)</li>
+    </ul>
+
+    <h3>Browser console shortcuts</h3>
+    <pre><span class="com">// Inspect current state (keys redacted)</span>
+JSON.stringify({...S, key:'[REDACTED]', deepseekKey:'[REDACTED]'}, null, 2)
+
+<span class="com">// List all conversations</span>
+S.convs.map(c => c.title)
+
+<span class="com">// Inspect codeStore</span>
+[...S.codeStore.entries()]
+
+<span class="com">// Check WebLLM status</span>
+!!window.webllm
+
+<span class="com">// Check Google token</span>
+S.google.user?.email
+
+<span class="com">// Manually trigger Drive sync</span>
+gDriveSyncNow()
+
+<span class="com">// Force re-render of chat</span>
+renderMessages()</pre>
+
+    <h3>Network inspection</h3>
+    <p>All API calls use <code>fetch()</code> and are visible in the browser DevTools Network tab. Filter by <code>XHR</code> or <code>Fetch</code>. The request body contains the full message array and model ID; the response body streams in for SSE calls.</p>
+
+    <h3>Storage inspection</h3>
+    <p>In Chrome DevTools: Application → IndexedDB → <code>atlas_db</code> → <code>conversations</code> to see all stored conversations. Application → Local Storage to see <code>atlas_v1</code> settings.</p>
+  </section>
+
+  <!-- TROUBLESHOOTING -->
+  <section id="troubleshooting">
+    <h2>Troubleshooting</h2>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+        <tr>
+          <td>Models don't load</td>
+          <td>API key not set or invalid</td>
+          <td>Open Settings → API Keys, re-enter key, click Connect</td>
+        </tr>
+        <tr>
+          <td>Chats lost after page reload</td>
+          <td>Page opened as <code>file://</code></td>
+          <td>Serve via HTTP: <code>python3 -m http.server 8080</code></td>
+        </tr>
+        <tr>
+          <td>API key doesn't persist</td>
+          <td>Credential API unavailable (Firefox)</td>
+          <td>Key stored in sessionStorage only — re-enter on each session, or use Chrome</td>
+        </tr>
+        <tr>
+          <td>Local model stuck at 0% download</td>
+          <td>WebLLM ESM module not loaded yet</td>
+          <td>Wait for the Download button to become enabled (polls until WebLLM ready)</td>
+        </tr>
+        <tr>
+          <td>Local model download button disabled</td>
+          <td>WebGPU not available</td>
+          <td>Use Chrome 113+ or Edge 113+ on desktop</td>
+        </tr>
+        <tr>
+          <td>Streaming stops mid-response</td>
+          <td>Network timeout or provider error</td>
+          <td>Click Continue → button to resume. Check DevTools network for error code.</td>
+        </tr>
+        <tr>
+          <td>Patch edit produces full rewrite</td>
+          <td>Model ignoring patch instruction</td>
+          <td>Disable Smart Patch in Settings; some models don't follow the patch format reliably</td>
+        </tr>
+        <tr>
+          <td>Drive sync fails</td>
+          <td>Expired Google token</td>
+          <td>Sign out and sign back in via Settings → Google Account</td>
+        </tr>
+        <tr>
+          <td>Artifact panel blank</td>
+          <td>iframe sandbox blocking scripts</td>
+          <td>Check if the artifact HTML has syntax errors; view Source tab in the artifact panel</td>
+        </tr>
+        <tr>
+          <td>Cost shows $0.0000 for non-Gemini</td>
+          <td>Model has no pricing data</td>
+          <td>Model's pricing fields are empty in the API response; no fix needed, just informational</td>
+        </tr>
+        <tr>
+          <td>Clarify bar appears on every message</td>
+          <td>Expected — only on first message with ambiguous phrasing</td>
+          <td>Click Dismiss or just pick an option; won't appear again mid-conversation</td>
+        </tr>
+        <tr>
+          <td>Local Ollama can't connect</td>
+          <td>CORS blocked by browser</td>
+          <td>Start Ollama with <code>OLLAMA_ORIGINS=* ollama serve</code></td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- CHANGELOG -->
+  <section id="changelog">
+    <h2>Change Log</h2>
+
+    <h3>Current build</h3>
+    <ul>
+      <li><strong>Local Model (WebGPU):</strong> Added <code>LocalModelManager</code> using WebLLM 0.2.46. Fixed ESM loading via dynamic <code>import()</code> + <code>webllm-ready</code> event. Fixed <code>setInitProgressCallback()</code> API (must be called before <code>reload()</code>). Fixed progress parsing for download phase (<code>[N/M]</code> fraction in <code>report.text</code>).</li>
+      <li><strong>API Key UI:</strong> Removed popup key modal. Replaced with inline tabbed section in Settings panel. All <code>openKeyModal()</code> calls now redirect to Settings + scroll.</li>
+      <li><strong>Google OAuth:</strong> Removed Gmail and Google Calendar tool connectors. Scope reduced to <code>drive.file</code> + profile only. Google sign-in now exclusively for chat history sync.</li>
+      <li><strong>Drive Chat Sync:</strong> Added <code>syncChatsToDrive()</code>, <code>_restoreChatsFromDrive()</code>, <code>_scheduleSync()</code>. Wired into <code>persist()</code> (debounced 3s). File: <code>atlas-chat-history.json</code>.</li>
+      <li><strong>Sidebar footer:</strong> New Google account card (<code>#sb-google-signed-in</code>) with avatar + "Chats saved to Drive". Replaced static key status with dynamic <code>_updateSidebarFooter()</code>.</li>
+      <li><strong>Settings:</strong> Added Google Sign-In section. Added inline API Keys section with provider tabs. Removed separate Google Connectors section and Drive backup buttons.</li>
+    </ul>
+
+    <h3>Prior notable additions</h3>
+    <ul>
+      <li><strong>Patch edit system:</strong> Smart code patching via <code>isEditIntent()</code>, <code>buildCodeStoreInjection()</code>, and the patch format parser.</li>
+      <li><strong>Visual editors:</strong> Word-like DOCX editor and slide-based PPTX editor inside the artifact panel.</li>
+      <li><strong>Continuation system:</strong> Continue → button for truncated responses via <code>_doContinue()</code>.</li>
+      <li><strong>IndexedDB storage:</strong> Migrated from localStorage to IndexedDB for conversation history (<code>ChatStorage</code>).</li>
+      <li><strong>Secure key storage:</strong> <code>KeyStore</code> with Credential API + sessionStorage fallback.</li>
+      <li><strong>Right message nav:</strong> Fixed-position panel listing all messages for quick navigation.</li>
+      <li><strong>Skills system:</strong> Built-in and custom skills with auto-detect intent mapping.</li>
+      <li><strong>Output formats:</strong> PDF, DOCX, PPTX, CSS format modes with AI-structured JSON output.</li>
+      <li><strong>KaTeX math:</strong> Inline and block LaTeX rendering, loaded on demand.</li>
+      <li><strong>Clarifying questions:</strong> Pattern-based ambiguity detection on first message.</li>
+    </ul>
+  </section>
+
+</main>
+</div>
+
+<script>
+// Highlight active nav link on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks  = document.querySelectorAll('.nav-link');
+const observer  = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
