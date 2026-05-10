@@ -19,11 +19,17 @@
 <!-- File generation libraries (loaded on demand) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="atlas.css">
-<!-- [NEW] WebLLM for in-browser local model inference via WebGPU -->
+<!-- [NEW] WebLLM — loaded as ESM via dynamic import, stored on window.webllm -->
 <script type="module">
-  import * as webllm from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js";
-  window.WebLLM = webllm;
-  window.dispatchEvent(new Event('webllm-loaded'));
+  try {
+    const wl = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js');
+    window.webllm = wl;
+    window.dispatchEvent(new CustomEvent('webllm-ready', { detail: wl }));
+    console.log('[Atlas] WebLLM loaded ✓');
+  } catch (e) {
+    console.warn('[Atlas] WebLLM failed to load:', e);
+    window.dispatchEvent(new CustomEvent('webllm-ready', { detail: null }));
+  }
 </script>
 </head>
 <body>
