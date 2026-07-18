@@ -67,30 +67,21 @@ const DEEPSEEK_MODELS_FALLBACK = [
 
 // Gemini models with pricing in $/token
 const GEMINI_MODELS_FALLBACK = [
-  { id: 'gemini-2.5-flash-preview-04-17', name: 'Gemini 3.1 Flash Lite Preview', context_length: 1048576,
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash', context_length: 1048576,
     pricing: { prompt: String(0), completion: String(0) },
-    description: 'Gemini 3.1 Flash Lite — fastest free-tier model' },
-  { id: 'gemini-2.5-flash-preview-05-20', name: 'Gemini 2.5 Flash Preview', context_length: 1048576,
+    description: 'Latest Gemini Flash — fast, free tier available' },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', context_length: 1048576,
+    pricing: { prompt: String(0), completion: String(0) },
+    description: 'Cost-efficient Gemini — free tier available' },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (Preview)', context_length: 1048576,
+    pricing: { prompt: String(0), completion: String(0) },
+    description: 'Most capable Gemini 3.1 — deep reasoning, free tier' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', context_length: 1048576,
     pricing: { prompt: String(0.15 / 1e6), completion: String(0.60 / 1e6) },
-    description: 'Latest Gemini 2.5 Flash — fast, multimodal, 1M context' },
-  { id: 'gemini-2.5-pro-preview-06-05', name: 'Gemini 2.5 Pro Preview', context_length: 1048576,
+    description: 'Fast, multimodal, 1M context — web search supported' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', context_length: 1048576,
     pricing: { prompt: String(1.25 / 1e6), completion: String(10.00 / 1e6) },
-    description: 'Most capable Gemini 2.5 — deep reasoning, 1M context' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', context_length: 1048576,
-    pricing: { prompt: String(0.10 / 1e6), completion: String(0.40 / 1e6) },
-    description: 'Fast, cost-effective Gemini 2.0 with 1M context' },
-  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', context_length: 1048576,
-    pricing: { prompt: String(0.075 / 1e6), completion: String(0.30 / 1e6) },
-    description: 'Lightest Gemini 2.0 model — ultra-fast and free-tier friendly' },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', context_length: 2097152,
-    pricing: { prompt: String(1.25 / 1e6), completion: String(5.00 / 1e6) },
-    description: 'Highly capable with 2M context window' },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', context_length: 1048576,
-    pricing: { prompt: String(0.075 / 1e6), completion: String(0.30 / 1e6) },
-    description: 'Fast and versatile — 1M context, free tier available' },
-  { id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash 8B', context_length: 1048576,
-    pricing: { prompt: String(0.0375 / 1e6), completion: String(0.15 / 1e6) },
-    description: 'Smallest, most affordable Gemini model — great for simple tasks' },
+    description: 'Powerful Gemini 2.5 — deep reasoning, 1M context' },
 ];
 
 // ── STATE ──────────────────────────────────────────────────────────────────
@@ -116,11 +107,22 @@ const S = {
   webSearchMode: false,
   toolDefinitions: [],
   codeStore: new Map(), // blockId -> { lang, content } — used by patch edit system
+  skills: {
+    customSkills: [],
+    activeSkillId: null,
+    smartAuto: false,
+  },
 };
+
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const MAX_CHAT_TITLE_LEN = 40;
+const MAX_CONV_MSGS = 40;
+const TOAST_DURATION = 3400;
+const SCROLL_DELAY = 80;
 
 // ── INIT ───────────────────────────────────────────────────────────────────
 // [CHANGED] Now uses initSecureStorage() which handles IndexedDB + KeyStore
-window.addEventListener('DOMContentLoaded', () => {
+function _init() {
   autoResize(document.getElementById('user-input'));
   loadSkillsState();
   renderChatList();
@@ -131,6 +133,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (S.cfg.fontSize && S.cfg.fontSize !== 14) previewFontSize(S.cfg.fontSize);
     if (S.cfg.chatDensity != null) previewChatDensity(S.cfg.chatDensity);
     initToolDefinitions();
+    LocalModelManager.addToModelList();
   }).catch(e => {
     console.warn('Atlas: initSecureStorage failed, falling back', e);
     // Fallback: load from localStorage the old way
@@ -142,7 +145,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (hasKey) reloadModels(); // No popup on load — users open Settings or use local model
     initToolDefinitions();
   });
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _init);
+} else {
+  _init();
+}
 
 document.addEventListener('click', e => {
   if (!document.getElementById('msw').contains(e.target)) closeMdd();
@@ -485,13 +494,6 @@ Dive into the work. Don't preface it with notes about your approach unless asked
   },
 ];
 
-// Skills state
-S.skills = {
-  customSkills: [],
-  activeSkillId: null,
-  smartAuto: false,
-};
-
 function loadSkillsState() {
   try {
     const raw = localStorage.getItem('atlas_skills_v1');
@@ -501,7 +503,7 @@ function loadSkillsState() {
       S.skills.activeSkillId = d.activeSkillId || null;
       S.skills.smartAuto = d.smartAuto === true; // explicit: default OFF unless user enabled it
     }
-  } catch(e) {}
+  } catch(e) { console.warn('Atlas: loadSkillsState failed', e); }
   updateSkillPill();
 }
 
@@ -512,7 +514,7 @@ function saveSkillsState() {
       activeSkillId: S.skills.activeSkillId,
       smartAuto: S.skills.smartAuto,
     }));
-  } catch(e) {}
+  } catch(e) { console.warn('Atlas: saveSkillsState failed', e); }
 }
 
 function getAllSkills() {
@@ -603,12 +605,12 @@ function renderSkillsModal() {
   const bg = document.getElementById('builtin-skills-grid');
   if (bg) {
     bg.innerHTML = BUILTIN_SKILLS.map(sk => `
-      <div class="skill-card ${S.skills.activeSkillId === sk.id ? 'active-skill' : ''}" onclick="setActiveSkill('${sk.id}')">
+      <div class="skill-card ${S.skills.activeSkillId === sk.id ? 'active-skill' : ''}" data-click="setActiveSkill('${sk.id}')">
         <div class="skill-card-icon">${sk.icon}</div>
         <div class="skill-card-name">${sk.name}</div>
         <div class="skill-card-desc">${sk.desc}</div>
         ${S.skills.activeSkillId === sk.id ? '<span class="skill-card-badge">Active</span>' : ''}
-        <button class="skill-edit-btn" onclick="event.stopPropagation();openSkillEdit('${sk.id}','builtin')" title="Edit skill">✏</button>
+        <button class="skill-edit-btn" data-click="event.stopPropagation();openSkillEdit('${sk.id}','builtin')" title="Edit skill">✏</button>
       </div>`).join('');
   }
 
@@ -619,13 +621,13 @@ function renderSkillsModal() {
     if (S.skills.customSkills.length > 0) {
       cs.style.display = '';
       cg.innerHTML = S.skills.customSkills.map(sk => `
-        <div class="skill-card ${S.skills.activeSkillId === sk.id ? 'active-skill' : ''}" onclick="setActiveSkill('${sk.id}')">
+        <div class="skill-card ${S.skills.activeSkillId === sk.id ? 'active-skill' : ''}" data-click="setActiveSkill('${sk.id}')">
           <div class="skill-card-icon">${sk.icon || '⚡'}</div>
           <div class="skill-card-name">${esc(sk.name)}</div>
           <div class="skill-card-desc">${esc(sk.desc || sk.prompt.slice(0,80) + '…')}</div>
           ${S.skills.activeSkillId === sk.id ? '<span class="skill-card-badge">Active</span>' : ''}
-          <button class="skill-edit-btn" onclick="event.stopPropagation();openSkillEdit('${sk.id}','custom')" title="Edit skill">✏</button>
-          <button class="skill-del-btn" onclick="event.stopPropagation();deleteCustomSkill('${sk.id}')" title="Delete skill">🗑</button>
+          <button class="skill-edit-btn" data-click="event.stopPropagation();openSkillEdit('${sk.id}','custom')" title="Edit skill">✏</button>
+          <button class="skill-del-btn" data-click="event.stopPropagation();deleteCustomSkill('${sk.id}')" title="Delete skill">🗑</button>
         </div>`).join('');
     } else {
       cs.style.display = 'none';
@@ -658,7 +660,7 @@ function loadSkillOverrides() {
 }
 
 function saveSkillOverrides(overrides) {
-  try { localStorage.setItem(SKILL_OVERRIDES_KEY, JSON.stringify(overrides)); } catch(e) {}
+  try { localStorage.setItem(SKILL_OVERRIDES_KEY, JSON.stringify(overrides)); } catch(e) { console.warn('Atlas: saveSkillOverrides failed', e); }
 }
 
 // Apply stored overrides onto BUILTIN_SKILLS at runtime
@@ -886,9 +888,9 @@ async function autoDetectSkill(text) {
 
     if (S.provider === 'gemini') {
       const modelId = S.model.apiId || S.model.id;
-      const ep = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(S.geminiKey)}`;
+      const ep = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`;
       const body = { contents: [{ role: 'user', parts: [{ text: SKILL_CLASSIFIER_PROMPT + '\n\nUser message: ' + text.slice(0, 400) }] }], generationConfig: { temperature: 0, maxOutputTokens: 10 } };
-      const res = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': S.geminiKey }, body: JSON.stringify(body) });
       const data = await res.json();
       skillId = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase() || 'none';
     } else {
@@ -1350,7 +1352,7 @@ async function generateDOCX(jsonStr, filename) {
     // ── Route: edited HTML path (_docxHtml present) ──────────────────────
     if (data._docxHtml) {
       const tmp = document.createElement('div');
-      tmp.innerHTML = data._docxHtml;
+      tmp.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(data._docxHtml, { ADD_TAGS: ['iframe'], ADD_ATTR: ['style', 'class', 'id'], ALLOW_DATA_ATTR: true }) : data._docxHtml;
       // Strip page-break divs (they're visual only)
       tmp.querySelectorAll('.ve-page-break').forEach(el => el.remove());
       children.push(...nodeToChildren(tmp));
@@ -1993,6 +1995,8 @@ function switchProvider(prov, silent) {
       S.filtModels = [...S.allModels];
       renderModelList();
     }
+    // Re-add local-webgpu entries so they survive model reload
+    LocalModelManager.addToModelList();
     // Restore last used model for this provider
     const lastModel = S._lastModelByProvider && S._lastModelByProvider[prov];
     if (lastModel && S.allModels.length) {
@@ -2061,7 +2065,7 @@ async function saveOpenRouterKey(val, errEl) {
           if (ep.id) endpointIds.add(ep.id.replace(/:(free|nitro|floor|beta)$/, ''));
         });
       }
-    } catch(e) { /* endpoints API may not exist */ }
+    } catch(e) { if (e.name !== 'AbortError') console.warn('Atlas: loadEndpoints failed', e); }
 
     S.allModels = (data.data || [])
       .filter(m => {
@@ -2238,6 +2242,11 @@ async function saveLocalKey(optionalKey, errEl) {
     errEl.style.display = 'block';
     return;
   }
+  try { new URL(baseUrl); } catch {
+    errEl.textContent = 'Invalid URL: enter a valid server URL (e.g. http://localhost:11434)';
+    errEl.style.display = 'block';
+    return;
+  }
   try {
     S.localBaseUrl = baseUrl;
     S.localKey = optionalKey || '';
@@ -2335,7 +2344,7 @@ function loadDeepSeekModels() {
 async function saveGeminiKey(val, errEl) {
   try {
     // Validate by listing models
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(val)}&pageSize=50`);
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=50`, { headers: { 'X-Goog-Api-Key': val } });
     if (!res.ok) throw new Error('Invalid key');
     const data = await res.json();
     S.geminiKey = val;
@@ -2378,9 +2387,9 @@ async function saveGeminiKey(val, errEl) {
 async function _detectGeminiTier(key) {
   // Try a minimal request to a paid-only model; free-tier keys get RESOURCE_EXHAUSTED or 403
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${encodeURIComponent(key)}`, {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key },
       body: JSON.stringify({ contents: [{ parts: [{ text: 'Hi' }] }], generationConfig: { maxOutputTokens: 1 } })
     });
     const d = await r.json();
@@ -2434,7 +2443,11 @@ function loadGeminiModels() {
   renderModelList();
   const currentIsGemini = S.model && models.find(m => m.id === S.model?.id);
   if (!currentIsGemini) {
-    const preferred = models.find(m => m.id === 'gemini-2.5-flash-preview-04-17') || models.find(m => m.id.includes('3.1') && m.id.includes('flash')) || models.find(m => m.id === 'gemini-2.0-flash') || models.find(m => m.id.includes('flash')) || models[0];
+        const preferred = models.find(m => m.id === 'gemini-3.5-flash')
+          || models.find(m => m.id === 'gemini-3.1-flash-lite')
+          || models.find(m => m.id === 'gemini-2.5-flash')
+          || models.find(m => m.id.includes('flash'))
+          || models[0];
     if (preferred) selectModel(preferred.id);
   }
 }
@@ -2464,6 +2477,7 @@ function closeMdd() {
 }
 
 function modelIcon(id) {
+  if (id.startsWith('local-webgpu/')) return '🖥️';
   if (id.includes('openai') || id.includes('gpt') || /\/o[134]-/.test(id)) return '⬛';
   if (id.includes('anthropic') || id.includes('claude')) return '🟠';
   if (id.includes('google') || id.includes('gemini')) return '🔵';
@@ -2492,7 +2506,7 @@ function isFree(m) { return parseFloat(m.pricing?.prompt || '0') === 0 && parseF
 function isImageGen(m) { return IMAGE_GEN_MODELS.some(imgM => m.id === imgM || m.id.startsWith(imgM.split('/')[0] + '/')); }
 function hasToolUse(m) {
   // Models known to support tool/function calling
-  const toolModels = ['gpt-4', 'gpt-3.5-turbo', 'claude-3', 'claude-3.5', 'gemini-1.5', 'gemini-2', 'mistral-large', 'command-r', 'llama-3.1', 'llama-3.2', 'qwen-2.5', 'deepseek'];
+  const toolModels = ['gpt-4', 'gpt-3.5-turbo', 'claude-3', 'claude-3.5', 'gemini-1.5', 'gemini-2', 'gemini-3', 'mistral-large', 'command-r', 'llama-3.1', 'llama-3.2', 'qwen-2.5', 'deepseek'];
   return toolModels.some(tm => m.id.includes(tm));
 }
 
@@ -2967,13 +2981,13 @@ function applyPatches(patches) {
     // Update data-raw on DOM element, re-render with highlights, sync _artifacts
     const blk = document.getElementById(block_id);
     if (blk) {
-      const newRawB64 = btoa(unescape(encodeURIComponent(newContent)));
+      const newRawB64 = utf8ToB64(newContent);
       blk.dataset.raw = newRawB64;
       const pre = blk.querySelector('pre');
       if (pre) {
         pre.innerHTML = buildLineTable(highlightCode(esc(newContent), entry.lang), bc.changed, bc.added);
         const firstChanged = pre.querySelector('.code-ln.changed, .code-ln.changed-add');
-        if (firstChanged) setTimeout(() => firstChanged.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 80);
+        if (firstChanged) setTimeout(() => firstChanged.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), SCROLL_DELAY);
       }
       // Keep _artifacts in sync so preview always shows latest patched code
       const artIdx = typeof _artifacts !== 'undefined' ? _artifacts.findIndex(a => a.id === block_id) : -1;
@@ -3079,11 +3093,11 @@ function _showContinueBtn(aiIdx, full, sEl, mEl, aiRow) {
   btn.innerHTML = '↩ Continue';
   btn.title = 'Response was cut off — click to continue';
   btn.style.cssText = 'color:var(--acc);border-color:var(--acc2);margin-top:6px;font-size:12px;padding:4px 12px;';
-  btn.onclick = async () => {
+  btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = '…';
     await _doContinue(aiIdx, full, sEl, mEl, aiRow);
-  };
+  });
   state.continueBtn = btn;
   _contState[aiIdx] = state;
 
@@ -3152,8 +3166,8 @@ async function _doContinue(aiIdx, previousFull, sEl, mEl, aiRow) {
       if (systemParts.length) geminiBody.systemInstruction = { parts: systemParts };
       if (S.webSearchMode) geminiBody.tools = [{ google_search: {} }];
       const modelId = S.model.apiId || S.model.id;
-      const ep = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(S.geminiKey)}`;
-      res = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody), signal: S.ac.signal });
+      const ep = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse`;
+      res = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': S.geminiKey }, body: JSON.stringify(geminiBody), signal: S.ac.signal });
     } else {
       const ep = isDeepSeek ? 'https://api.deepseek.com/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
       const auth = isDeepSeek ? S.deepseekKey : S.key;
@@ -3289,18 +3303,23 @@ async function sendMessage() {
     return;
   }
 
+  // Route to local WebGPU model if selected
+  if (S.model?.id?.startsWith('local-webgpu/')) {
+    await _sendWithLocalModel(text);
+    return;
+  }
   if (!S.model) { toast('Please select a model first', 'er'); return; }
   if (S.budget > 0 && S.totalCost >= S.budget) { toast('Budget cap reached. Adjust in Settings.', 'er'); return; }
 
   // Create / update chat
   if (!S.chatId) {
     const id = Date.now() + '';
-    S.convs.unshift({ id, title: text.slice(0, 40) || 'New conversation', msgs: [] });
+    S.convs.unshift({ id, title: text.slice(0, MAX_CHAT_TITLE_LEN) || 'New conversation', msgs: [] });
     S.chatId = id; renderChatList();
   }
   const chat = S.convs.find(c => c.id === S.chatId);
   if (chat && chat.title === 'New conversation' && text) {
-    chat.title = text.slice(0, 40) + (text.length > 40 ? '…' : '');
+    chat.title = text.slice(0, MAX_CHAT_TITLE_LEN) + (text.length > MAX_CHAT_TITLE_LEN ? '…' : '');
     renderChatList();
   }
 
@@ -3478,7 +3497,9 @@ async function sendMessage() {
 
       // Add Google Search grounding tool for Gemini web search
       // Also add Google connector tools if signed in (Gemini supports function calling)
-      if (_gTokenValid() && S.toolDefinitions.length > 0) {
+      if (S.webSearchMode) {
+        geminiBody.tools = [{ google_search: {} }];
+      } else if (_gTokenValid() && S.toolDefinitions.length > 0) {
         // Convert OpenAI-style tool definitions to Gemini functionDeclarations format
         const functionDeclarations = S.toolDefinitions
           .filter(t => t.type === 'function')
@@ -3489,21 +3510,16 @@ async function sendMessage() {
           }));
         if (functionDeclarations.length > 0) {
           geminiBody.tools = geminiBody.tools || [];
-          // Don't mix google_search grounding with function declarations — Gemini rejects that
-          if (!S.webSearchMode) {
-            geminiBody.tools.push({ function_declarations: functionDeclarations });
-          }
+          geminiBody.tools.push({ function_declarations: functionDeclarations });
         }
-      } else if (S.webSearchMode) {
-        geminiBody.tools = [{ google_search: {} }];
       }
 
       const modelId = (S.model.apiId || S.model.id);
-      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(S.geminiKey)}`;
+      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse`;
 
       const res = await fetch(geminiEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': S.geminiKey },
         body: JSON.stringify(geminiBody),
         signal: S.ac.signal,
       });
@@ -3514,7 +3530,7 @@ async function sendMessage() {
         // Auto-retry on Gemini rate limit (429) — parse retryDelay from error message
         if (res.status === 429) {
           const secMatch = em.match(/retry.*?(\d+(?:\.\d+)?)s/i) || em.match(/(\d+(?:\.\d+)?)\s*s/i);
-          const waitSec = secMatch ? Math.min(parseFloat(secMatch[1]) + 1, 65) : 15;
+          const waitSec = secMatch ? Math.min(parseFloat(secMatch[1]) + 1, 30) : 5;
           // Show countdown in the thinking row
           const tspan = thinkRow.querySelector('span:last-child');
           let remaining = Math.ceil(waitSec);
@@ -3530,7 +3546,7 @@ async function sendMessage() {
           // Retry the request
           const retryRes = await fetch(geminiEndpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': S.geminiKey },
             body: JSON.stringify(geminiBody),
             signal: S.ac.signal,
           });
@@ -3739,7 +3755,7 @@ async function sendMessage() {
 
         try {
           const fr = await fetch(geminiEndpoint, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': S.geminiKey },
             body: JSON.stringify(followupBody), signal: S.ac.signal
           });
           if (fr.ok) {
@@ -4070,7 +4086,7 @@ async function sendMessage() {
     if (codeBlocks.length > 1) {
       const codes = codeBlocks.map((cb, i) => {
         const lang = cb.dataset.lang || cb.querySelector('.code-lang')?.textContent?.toLowerCase() || 'txt';
-        const raw = cb.dataset.raw ? decodeURIComponent(escape(atob(cb.dataset.raw))) : cb.querySelector('pre')?.innerText || '';
+        const raw = cb.dataset.raw ? b64ToUtf8(cb.dataset.raw) : cb.querySelector('pre')?.innerText || '';
         const ext = langExt(lang) || 'txt';
         return { code: raw, fn: extractFilename(raw, ext) };
       }).filter(c => c.code);
@@ -4294,7 +4310,7 @@ function renderMarkdown(text, msgIdx) {
       code = S.codeStore.get(id).content;
     }
     // rawB64 must be computed AFTER the codeStore check so it reflects patched content
-    const rawB64 = btoa(unescape(encodeURIComponent(code.trimEnd())));
+    const rawB64 = utf8ToB64(code.trimEnd());
 
     // Detect generated file types — show a special download button
     const fmtKey = lang === 'pdf-content' ? 'pdf' : lang === 'docx-content' ? 'docx' : lang === 'pptx-content' ? 'pptx' : null;
@@ -4429,7 +4445,7 @@ function langExt(l) {
 async function triggerFileGen(blockId, fmt) {
   const blk = document.getElementById(blockId);
   if (!blk) return;
-  const raw = blk.dataset.raw ? decodeURIComponent(escape(atob(blk.dataset.raw))) : blk.querySelector('pre')?.innerText || '';
+  const raw = blk.dataset.raw ? b64ToUtf8(blk.dataset.raw) : blk.querySelector('pre')?.innerText || '';
   const ts = new Date().toISOString().slice(0,10);
   // Extract title from JSON for a meaningful filename
   let baseName = '';
@@ -4470,7 +4486,7 @@ async function triggerFileGen(blockId, fmt) {
 function copyCode(id, btn) {
   const blk = document.getElementById(id);
   if (!blk) return;
-  const raw = blk.dataset.raw ? decodeURIComponent(escape(atob(blk.dataset.raw))) : blk.querySelector('pre')?.innerText || '';
+  const raw = blk.dataset.raw ? b64ToUtf8(blk.dataset.raw) : blk.querySelector('pre')?.innerText || '';
   navigator.clipboard.writeText(raw).then(() => {
     btn.textContent = '✓ Copied'; btn.classList.add('done');
     setTimeout(() => { btn.textContent = '📋 Copy'; btn.classList.remove('done'); }, 2000);
@@ -4501,7 +4517,7 @@ function extractFilename(code, ext) {
 function downloadCode(id, ext) {
   const blk = document.getElementById(id);
   if (!blk) return;
-  const raw = blk.dataset.raw ? decodeURIComponent(escape(atob(blk.dataset.raw))) : blk.querySelector('pre')?.innerText || '';
+  const raw = blk.dataset.raw ? b64ToUtf8(blk.dataset.raw) : blk.querySelector('pre')?.innerText || '';
   const mimeMap = { css:'text/css', html:'text/html', js:'text/javascript', ts:'text/typescript', json:'application/json', svg:'image/svg+xml', xml:'application/xml', csv:'text/csv', sh:'text/x-sh', py:'text/x-python', md:'text/markdown' };
   const mime = mimeMap[ext] || 'text/plain';
   const blob = new Blob([raw], { type: mime });
@@ -4589,10 +4605,8 @@ function fmtBytes(b) {
 // ── COST ───────────────────────────────────────────────────────────────────
 // Gemini models that have a free tier via Google AI Studio (no charge up to generous daily limits)
 const GEMINI_FREE_MODELS = new Set([
-  'gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash-preview-05-20', 'gemini-2.5-flash',
-  'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-exp',
-  'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-latest',
-  'gemini-1.5-pro', 'gemini-1.5-pro-latest',
+  'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview',
+  'gemini-2.5-flash', 'gemini-2.5-pro',
 ]);
 function isGeminiFreeModel() {
   if (S.provider !== 'gemini' || !S.model) return false;
@@ -4712,23 +4726,20 @@ function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 180) + 'px';
 }
-function esc(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 function toast(msg, type = '') {
   const el = document.getElementById('toast');
   const icons = { ok: '✓', er: '✕', '': 'ℹ' };
   el.innerHTML = `<span style="color:${type === 'ok' ? 'var(--grn)' : type === 'er' ? 'var(--red)' : 'var(--acc)'}">${icons[type] || 'ℹ'}</span> ${esc(msg)}`;
   el.className = `show ${type}`;
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.className = type; }, 3400);
+  el._t = setTimeout(() => { el.className = type; }, TOAST_DURATION);
 }
 
 // ── PERSISTENCE ────────────────────────────────────────────────────────────
 // [CHANGED] Secure storage system: IndexedDB for conversations, Credential API for keys
 const STORAGE_KEY = 'nexus_v2_image_tools';  // kept for non-sensitive settings only
 const ATLAS_DB_NAME = 'AtlasDB';
-const ATLAS_DB_VERSION = 1;
+const ATLAS_DB_VERSION = 2;
 const ATLAS_STORE = 'conversations';
 const ATLAS_SETTINGS_KEY = 'atlas_settings_v1'; // non-sensitive settings in localStorage
 
@@ -4762,7 +4773,7 @@ const ChatStorage = (() => {
           id: conv.id,
           title: conv.title,
           codeStore: conv.codeStore || [],
-          msgs: (conv.msgs || []).slice(-40).map(m => ({
+          msgs: (conv.msgs || []).slice(-MAX_CONV_MSGS).map(m => ({
             role: m.role,
             content: m.content,
             files: (m.files || []).filter(f => !f.type?.startsWith('image/')).map(f => ({ name: f.name, type: f.type })),
@@ -4869,7 +4880,7 @@ const KeyStore = (() => {
             keys[p] = cred.password;
             source = 'credential';
           }
-        } catch(e) { /* silent */ }
+    } catch(e) { console.warn('Atlas: loadLocalModels fetch failed', e); }
       }
     }
 
@@ -5479,7 +5490,10 @@ async function initSecureStorage() {
   // 8. Load models if key is present; update sidebar footer
   const hasKey = S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl;
   if (hasKey) {
-    setTimeout(reloadModels, 100);
+    setTimeout(async () => {
+      await reloadModels();
+      LocalModelManager.addToModelList();
+    }, 100);
   }
   // [MODIFIED] Update sidebar footer to reflect key/Google state
   _updateSidebarFooter();
@@ -5511,24 +5525,26 @@ async function reloadModels() {
       }
     } catch(e) { /* use cached fallback */ }
     loadDeepSeekModels();
+    LocalModelManager.addToModelList();
     toast('Session restored ✓', 'ok');
     return;
   }
   if (S.provider === 'openai') {
     if (!S.openaiKey) return;
     loadOpenAIModels();
+    LocalModelManager.addToModelList();
     toast('Session restored ✓', 'ok');
     return;
   }
   if (S.provider === 'local') {
     if (!S.localBaseUrl) return;
-    loadLocalModels().then(() => toast('Session restored ✓', 'ok')).catch(() => {});
+    loadLocalModels().then(() => { LocalModelManager.addToModelList(); toast('Session restored ✓', 'ok'); }).catch(() => {});
     return;
   }
   if (S.provider === 'gemini') {
     if (!S.geminiKey) return;
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(S.geminiKey)}&pageSize=50`);
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=50`, { headers: { 'X-Goog-Api-Key': S.geminiKey } });
       if (res.ok) {
         const data = await res.json();
         const liveModels = (data.models || [])
@@ -5551,6 +5567,7 @@ async function reloadModels() {
       }
     } catch(e) { /* use cached fallback */ }
     loadGeminiModels();
+    LocalModelManager.addToModelList();
     toast('Session restored ✓', 'ok');
     return;
   }
@@ -5600,6 +5617,7 @@ async function reloadModels() {
     S.filtModels = [...S.allModels];
     renderModelList();
     updateImageModelDropdown();
+    LocalModelManager.addToModelList();
 
     if (S._pendingModel) {
       const m = S.allModels.find(x => x.id === S._pendingModel.id) || S._pendingModel;
@@ -5860,11 +5878,11 @@ async function sendFromHistory() {
     if (systemParts2.length) geminiBody2.systemInstruction = { parts: systemParts2 };
 
     const modelId2 = (S.model.apiId || S.model.id);
-    const geminiEndpoint2 = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId2)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(S.geminiKey)}`;
+    const geminiEndpoint2 = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId2)}:streamGenerateContent?alt=sse`;
 
     try {
       const res2 = await fetch(geminiEndpoint2, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': S.geminiKey },
         body: JSON.stringify(geminiBody2), signal: S.ac.signal,
       });
       if (!res2.ok) {
@@ -6116,7 +6134,7 @@ let _activeArt = 0;
 function previewCode(id) {
   const blk = document.getElementById(id);
   if (!blk) return;
-  const raw = blk.dataset.raw ? decodeURIComponent(escape(atob(blk.dataset.raw))) : blk.querySelector('pre')?.innerText || '';
+  const raw = blk.dataset.raw ? b64ToUtf8(blk.dataset.raw) : blk.querySelector('pre')?.innerText || '';
   const lang = (blk.dataset.lang || 'html').toLowerCase();
   // Build title: prefer <title> tag, then filename comment, then fallback
   const titleFromTag = raw.match(/<title>([^<]+)<\/title>/i)?.[1];
@@ -6960,7 +6978,21 @@ function hveRawStyle() {
 function hveExecCmd(cmd) {
   const doc = _hveIframe && _hveIframe.contentDocument;
   if (!doc) return;
-  doc.execCommand(cmd, false, null);
+  const win = _hveIframe.contentWindow;
+  const sel = win.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const inlineTags = { bold:'strong', italic:'em', underline:'u' };
+  if (inlineTags[cmd]) {
+    const el = doc.createElement(inlineTags[cmd]);
+    try { range.surroundContents(el); } catch {
+      const fragment = range.extractContents();
+      el.appendChild(fragment);
+      range.insertNode(el);
+    }
+  } else {
+    console.warn('Atlas: hveExecCmd unknown cmd', cmd);
+  }
 }
 
 function hveInsertImage() {
@@ -7039,7 +7071,7 @@ function hveDeleteSelected() {
 
 function hveUndo() {
   const doc = _hveIframe && _hveIframe.contentDocument;
-  if (doc) doc.execCommand('undo', false, null);
+  if (doc) doc.execCommand('undo', false, null); // ponytail: no direct non-execCommand undo for contentEditable; browser undo stack is the only reliable path
 }
 
 function hveApply() {
@@ -7177,19 +7209,19 @@ function _veBuildDocx(container, data) {
   page.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
-      if (e.shiftKey) { document.execCommand('outdent', false, null); }
-      else { document.execCommand('indent', false, null); }
+      if (e.shiftKey) { veExecCmd('outdent'); }
+      else { veExecCmd('indent'); }
       return;
     }
     if (e.ctrlKey || e.metaKey) {
       switch (e.key.toLowerCase()) {
-        case 'b': e.preventDefault(); document.execCommand('bold',      false, null); veUpdateFmtBar(); break;
-        case 'i': e.preventDefault(); document.execCommand('italic',    false, null); veUpdateFmtBar(); break;
-        case 'u': e.preventDefault(); document.execCommand('underline', false, null); veUpdateFmtBar(); break;
-        case 'e': e.preventDefault(); document.execCommand('justifyCenter', false, null); veSetAlignBtns('center'); break;
-        case 'l': e.preventDefault(); document.execCommand('justifyLeft',   false, null); veSetAlignBtns('left');   break;
-        case 'r': if (!e.shiftKey) { e.preventDefault(); document.execCommand('justifyRight', false, null); veSetAlignBtns('right'); } break;
-        case 'j': e.preventDefault(); document.execCommand('justifyFull', false, null); veSetAlignBtns('justify'); break;
+        case 'b': e.preventDefault(); veExecCmd('bold'); veUpdateFmtBar(); break;
+        case 'i': e.preventDefault(); veExecCmd('italic'); veUpdateFmtBar(); break;
+        case 'u': e.preventDefault(); veExecCmd('underline'); veUpdateFmtBar(); break;
+        case 'e': e.preventDefault(); veExecCmd('justifyCenter'); veSetAlignBtns('center'); break;
+        case 'l': e.preventDefault(); veExecCmd('justifyLeft'); veSetAlignBtns('left'); break;
+        case 'r': if (!e.shiftKey) { e.preventDefault(); veExecCmd('justifyRight'); veSetAlignBtns('right'); } break;
+        case 'j': e.preventDefault(); veExecCmd('justifyFull'); veSetAlignBtns('justify'); break;
         case 'k': e.preventDefault(); veInsertLink(); break;
         case 'h': e.preventDefault(); veOpenFindReplace(); break;
         case 'm': if (e.shiftKey) { e.preventDefault(); veExecCmd('strikeThrough'); } break;
@@ -7248,7 +7280,60 @@ function veBlockKeydown(e) {
   }
 }
 
-function veExecCmd(cmd) { document.execCommand(cmd, false, null); veUpdateFmtBar(); }
+function _veWrapSelection(tag) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const el = document.createElement(tag);
+  try { range.surroundContents(el); } catch {
+    const fragment = range.extractContents();
+    el.appendChild(fragment);
+    range.insertNode(el);
+  }
+}
+function _veBlockStyle(prop, val) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const node = sel.getRangeAt(0).startContainer;
+  const block = node.nodeType === 3 ? node.parentElement : node;
+  const editable = block.closest?.('#ve-word-page');
+  const target = editable || _veActiveBlock;
+  if (target) target.style[prop] = val;
+}
+function veExecCmd(cmd, val) {
+  const inlineTags = { bold:'strong', italic:'em', underline:'u', strikeThrough:'s', superscript:'sup', subscript:'sub' };
+  if (inlineTags[cmd]) { _veWrapSelection(inlineTags[cmd]); veUpdateFmtBar(); return; }
+  if (cmd === 'indent') { _veBlockStyle('paddingLeft', ((parseInt(_veActiveBlock?.style.paddingLeft) || 0) + 24) + 'px'); veUpdateFmtBar(); return; }
+  if (cmd === 'outdent') { _veBlockStyle('paddingLeft', Math.max(0, (parseInt(_veActiveBlock?.style.paddingLeft) || 0) - 24) + 'px'); veUpdateFmtBar(); return; }
+  if (cmd.startsWith('justify')) { _veBlockStyle('textAlign', cmd.replace('justify', '').toLowerCase()); veUpdateFmtBar(); return; }
+  if (cmd === 'foreColor') { _veWrapSelectionColor('color', val); veUpdateFmtBar(); return; }
+  if (cmd === 'hiliteColor' || cmd === 'backColor') { _veWrapSelectionColor('backgroundColor', val); veUpdateFmtBar(); return; }
+  if (cmd === 'fontName') { _veWrapSelectionStyle('fontFamily', val); veUpdateFmtBar(); return; }
+}
+function _veWrapSelectionStyle(prop, val) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const span = document.createElement('span');
+  span.style[prop] = val;
+  try { range.surroundContents(span); } catch {
+    const fragment = range.extractContents();
+    span.appendChild(fragment);
+    range.insertNode(span);
+  }
+}
+function _veWrapSelectionColor(cssProp, val) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const span = document.createElement('span');
+  span.style[cssProp] = val;
+  try { range.surroundContents(span); } catch {
+    const fragment = range.extractContents();
+    span.appendChild(fragment);
+    range.insertNode(span);
+  }
+}
 
 // Save/restore selection so format toolbar doesn't lose focus
 let _veSavedSel = null;
@@ -7261,7 +7346,7 @@ function veSaveSelection() {
 function veRestoreSelection() {
   const page = document.getElementById('ve-word-page');
   if (!page || !_veSavedSel) return;
-  // Must focus the contenteditable before restoring selection, otherwise execCommand has no target.
+  // Must focus the contenteditable before restoring selection.
   // We do it synchronously so the range is set before the browser processes the click event.
   page.focus({ preventScroll: true });
   try {
@@ -7285,38 +7370,36 @@ function veExecFormat(cmd, val) {
         sel.removeAllRanges();
         sel.addRange(range);
       } catch(e) {
-        // surroundContents fails if selection spans multiple elements — use execCommand fallback
-        document.execCommand('styleWithCSS', false, true);
-        document.execCommand('fontSize', false, '7');
-        document.querySelectorAll('.ve-word-page font[size="7"]').forEach(f => {
-          const sp2 = document.createElement('span');
-          sp2.style.fontSize = parseInt(val) + 'px';
-          while (f.firstChild) sp2.appendChild(f.firstChild);
-          f.parentNode.replaceChild(sp2, f);
-        });
+        // surroundContents fails if selection spans multiple elements — extract, wrap, re-insert
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          try {
+            const range = sel.getRangeAt(0);
+            const fragment = range.extractContents();
+            const span = document.createElement('span');
+            span.style.fontSize = parseInt(val) + 'px';
+            span.appendChild(fragment);
+            range.insertNode(span);
+          } catch(e2) {
+            console.warn('Atlas: veExecFormat fontSize fallback also failed', e2);
+          }
+        }
       }
     } else {
       // No selection: apply to the currently focused block
       const blk = _veActiveBlock;
       if (blk) blk.style.fontSize = parseInt(val) + 'px';
     }
-  } else if (cmd === 'foreColor' || cmd === 'hiliteColor' || cmd === 'backColor' || cmd === 'fontName') {
-    // Use styleWithCSS so these emit inline style spans, not legacy font tags
-    document.execCommand('styleWithCSS', false, true);
-    document.execCommand(cmd, false, val);
+  } else if (cmd === 'foreColor') {
+    _veWrapSelectionColor('color', val);
+  } else if (cmd === 'hiliteColor' || cmd === 'backColor') {
+    _veWrapSelectionColor('backgroundColor', val);
+  } else if (cmd === 'fontName') {
+    _veWrapSelectionStyle('fontFamily', val);
   } else if (isAlign) {
-    // Alignment: focus the page first, then restore the saved selection, then execute
-    const page = document.getElementById('ve-word-page');
-    if (page) page.focus({ preventScroll: true });
-    if (_veSavedSel) {
-      try {
-        const s = window.getSelection();
-        if (s) { s.removeAllRanges(); s.addRange(_veSavedSel.cloneRange()); }
-      } catch(e) {}
-    }
-    document.execCommand(cmd, false, null);
+    _veBlockStyle('textAlign', cmd.replace('justify', '').toLowerCase());
   } else {
-    document.execCommand(cmd, false, val);
+    console.warn('Atlas: veExecFormat unknown cmd', cmd, val);
   }
   veUpdateFmtBar();
 }
@@ -7328,7 +7411,32 @@ function veSetAlignBtns(align) {
   });
 }
 
-function veToggleList(kind) { document.execCommand(kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList', false, null); veUpdateFmtBar(); }
+function veToggleList(kind) {
+  const page = document.getElementById('ve-word-page');
+  if (!page) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const node = sel.getRangeAt(0).startContainer;
+  const block = node.nodeType === 3 ? node.parentElement : node;
+  const existingList = block.closest?.('ul, ol');
+  if (existingList) {
+    // If already in a list of the same kind, unwrap it (toggle off)
+    if ((kind === 'ul' && existingList.tagName === 'UL') || (kind === 'ol' && existingList.tagName === 'OL')) {
+      const parent = existingList.parentNode;
+      while (existingList.firstChild) parent.insertBefore(existingList.firstChild, existingList);
+      parent.removeChild(existingList);
+    }
+  } else {
+    // Wrap the current block in a list
+    const list = document.createElement(kind);
+    const item = document.createElement('li');
+    const parent = block.closest?.('[contenteditable]') || page;
+    item.appendChild(block.cloneNode(true));
+    list.appendChild(item);
+    block.parentNode.replaceChild(list, block);
+  }
+  veUpdateFmtBar();
+}
 
 function veInsertTable() {
   const page = document.getElementById('ve-word-page');
@@ -7358,7 +7466,7 @@ function veInsertTable() {
   document.body.appendChild(modal);
   document.getElementById('_vt_rows').focus();
 
-  document.getElementById('_vt_ok').onclick = () => {
+  document.getElementById('_vt_ok').addEventListener('click', () => {
     const rows = Math.max(1, Math.min(30, parseInt(document.getElementById('_vt_rows').value) || 3));
     const cols = Math.max(1, Math.min(15, parseInt(document.getElementById('_vt_cols').value) || 3));
     const hasHeader = document.getElementById('_vt_header').checked;
@@ -7418,7 +7526,7 @@ function veInsertTable() {
     }
     veUpdateFmtBar();
     veUpdatePageNumbers();
-  };
+  });
 }
 
 function veInsertImage() {
@@ -7491,9 +7599,28 @@ function veInsertLink() {
   const sel = window.getSelection();
   const linkText = (sel && sel.toString().trim()) ? sel.toString() : url;
   if (sel && !sel.isCollapsed) {
-    document.execCommand('createLink', false, url);
+    try {
+      const range = sel.getRangeAt(0);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.target = '_blank';
+      anchor.style.color = '#2b579a';
+      try { range.surroundContents(anchor); } catch {
+        const fragment = range.extractContents();
+        anchor.appendChild(fragment);
+        range.insertNode(anchor);
+      }
+    } catch(e) { console.warn('Atlas: veInsertLink failed', e); }
   } else {
-    document.execCommand('insertHTML', false, `<a href="${url}" target="_blank" style="color:#2b579a">${linkText}</a>`);
+    try {
+      const range = sel.getRangeAt(0);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.target = '_blank';
+      anchor.style.color = '#2b579a';
+      anchor.textContent = linkText;
+      range.insertNode(anchor);
+    } catch(e) { console.warn('Atlas: veInsertLink (no selection) failed', e); }
   }
   veUpdateFmtBar();
 }
@@ -7741,7 +7868,18 @@ function veApplyPageSetup() {
 // Page break insertion
 function veInsertPageBreak() {
   const html = '<div class="ve-page-break" contenteditable="false" style="position:relative;margin:24px 0;pointer-events:none"><hr style="border:none;border-top:2px dashed #aac4ff;margin:0"><span style="position:absolute;right:0;top:-9px;font-size:10px;color:#aac4ff;background:#fff;padding:0 6px;font-family:\'DM Mono\',monospace;pointer-events:none">— Page Break —</span></div><p><br></p>';
-  document.execCommand('insertHTML', false, html);
+  try {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const frag = document.createDocumentFragment();
+      while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+      range.deleteContents();
+      range.insertNode(frag);
+    }
+  } catch(e) { console.warn('Atlas: veInsertPageBreak failed', e); }
   veUpdateFmtBar();
   // Recount pages
   veUpdatePageNumbers();
@@ -7976,7 +8114,7 @@ function _veRenderPptxPanel() {
   _veSlides.forEach((sl, i) => {
     const thumb = document.createElement('div');
     thumb.className = 've-ppt-thumb' + (i === _veActiveSlidIdx ? ' active' : '');
-    thumb.onclick = () => { _veSaveCurrentSlide(); _veRenderSlide(i); };
+    thumb.addEventListener('click', () => { _veSaveCurrentSlide(); _veRenderSlide(i); });
     const num = document.createElement('div');
     num.className = 've-ppt-thumb-num';
     num.textContent = i + 1;
@@ -7997,12 +8135,12 @@ function _veRenderPptxPanel() {
   const addBtn = document.createElement('div');
   addBtn.className = 've-ppt-add-slide';
   addBtn.innerHTML = '+<br>Slide';
-  addBtn.onclick = () => {
+    addBtn.addEventListener('click', () => {
     _veSaveCurrentSlide();
     _veSlides.push({ title:'New Slide', body:'', bullets:[], notes:'', background: SLIDE_COLORS[_veSlides.length % SLIDE_COLORS.length] });
     _veRenderPptxPanel();
     _veRenderSlide(_veSlides.length - 1);
-  };
+  });
   panel.appendChild(addBtn);
 }
 
@@ -8087,12 +8225,12 @@ function _veRenderSlide(idx) {
     img.src = sl.image;
     img.style.cssText = 'max-height:120px;max-width:45%;object-fit:contain;border-radius:4px;cursor:pointer';
     img.title = 'Click to change image URL';
-    img.onclick = () => { const u = prompt('New image URL:', sl.image); if (u) { sl.image = u; img.src = u; _vePptxPushHistory(); }};
+    img.addEventListener('click', () => { const u = prompt('New image URL:', sl.image); if (u) { sl.image = u; img.src = u; _vePptxPushHistory(); }});
     const rmImg = document.createElement('button');
     rmImg.className = 've-slide-bullet-del';
     rmImg.textContent = '×';
     rmImg.title = 'Remove image';
-    rmImg.onclick = () => { delete sl.image; _vePptxPushHistory(); _veRenderSlide(_veActiveSlidIdx); };
+    rmImg.addEventListener('click', () => { delete sl.image; _vePptxPushHistory(); _veRenderSlide(_veActiveSlidIdx); });
     imgWrap.appendChild(img); imgWrap.appendChild(rmImg);
     content.appendChild(imgWrap);
   }
@@ -8139,14 +8277,14 @@ function _veRenderSlide(idx) {
       del.className = 've-slide-bullet-del';
       del.textContent = '×';
       del.title = 'Remove bullet';
-      del.onclick = () => { sl.bullets.splice(bi, 1); _vePptxPushHistory(); renderBullets(); };
+      del.addEventListener('click', () => { sl.bullets.splice(bi, 1); _vePptxPushHistory(); renderBullets(); });
       row.appendChild(dot); row.appendChild(inp); row.appendChild(del);
       bulletsWrap.appendChild(row);
     });
     const addBtn = document.createElement('button');
     addBtn.className = 've-slide-add-bullet';
     addBtn.textContent = '+ Add bullet';
-    addBtn.onclick = () => {
+  addBtn.addEventListener('click', () => {
       sl.bullets.push('');
       _vePptxPushHistory();
       renderBullets();
@@ -8154,7 +8292,7 @@ function _veRenderSlide(idx) {
         const inputs = bulletsWrap.querySelectorAll('.ve-slide-bullet-input');
         if (inputs.length) inputs[inputs.length - 1].focus();
       }, 30);
-    };
+    });
     bulletsWrap.appendChild(addBtn);
   };
   renderBullets();
@@ -8199,12 +8337,12 @@ function _veRenderSlideStrip(idx, sl) {
     const delBtn = document.createElement('button');
     delBtn.className = 've-strip-del-btn';
     delBtn.textContent = '× Delete Slide';
-    delBtn.onclick = () => {
+    delBtn.addEventListener('click', () => {
       _vePptxPushHistory();
       _veSlides.splice(idx, 1);
       _veRenderPptxPanel();
       _veRenderSlide(Math.min(idx, _veSlides.length - 1));
-    };
+    });
     delSec.appendChild(delBtn);
     strip.appendChild(delSec);
   }
@@ -8223,7 +8361,7 @@ function _vePptRenderBgToolbar(sl) {
     const sw = document.createElement('div');
     sw.className = 've-swatch' + (c === sl.background ? ' active' : '');
     sw.style.background = c; sw.title = c;
-    sw.onclick = () => {
+    sw.addEventListener('click', () => {
       sl.background = c;
       _vePptxPushHistory();
       const bgEl = document.querySelector('.ve-slide-bg');
@@ -8232,11 +8370,11 @@ function _vePptRenderBgToolbar(sl) {
       container.querySelectorAll('.ve-swatch').forEach(s => s.classList.remove('active'));
       sw.classList.add('active');
       _veAutoFlush();
-    };
+    });
     container.appendChild(sw);
   });
   if (custBtn) {
-    custBtn.onclick = () => custInput?.click();
+    custBtn.addEventListener('click', () => custInput?.click());
   }
   if (custInput) {
     custInput.value = sl.background?.startsWith('#') ? sl.background : '#4c3fcf';
@@ -8460,7 +8598,7 @@ function vePptPresent() {
       exitBtn.className = 'ppt-exit';
       exitBtn.style.cssText = 'position:absolute;top:14px;left:18px;background:none;border:none;color:rgba(255,255,255,.5);font-size:22px;cursor:pointer;padding:4px;z-index:2';
       exitBtn.textContent = '✕';
-      exitBtn.onclick = (e) => { e.stopPropagation(); overlay.remove(); document.removeEventListener('keydown', keyHandler); };
+      exitBtn.addEventListener('click', (e) => { e.stopPropagation(); overlay.remove(); document.removeEventListener('keydown', keyHandler); });
       overlay.appendChild(exitBtn);
     }
 
@@ -8513,7 +8651,7 @@ function vePptPresent() {
       prev.className = 'ppt-nav';
       prev.style.cssText = 'position:absolute;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.1);border:none;color:#fff;font-size:28px;border-radius:50%;width:48px;height:48px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2';
       prev.innerHTML = '‹';
-      prev.onclick = (e) => { e.stopPropagation(); pIdx--; renderPresSlide(-1); };
+      prev.addEventListener('click', (e) => { e.stopPropagation(); pIdx--; renderPresSlide(-1); });
       overlay.appendChild(prev);
     }
     if (pIdx < _veSlides.length - 1) {
@@ -8521,7 +8659,7 @@ function vePptPresent() {
       next.className = 'ppt-nav';
       next.style.cssText = 'position:absolute;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.1);border:none;color:#fff;font-size:28px;border-radius:50%;width:48px;height:48px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2';
       next.innerHTML = '›';
-      next.onclick = (e) => { e.stopPropagation(); pIdx++; renderPresSlide(1); };
+      next.addEventListener('click', (e) => { e.stopPropagation(); pIdx++; renderPresSlide(1); });
       overlay.appendChild(next);
     }
 
@@ -8580,6 +8718,7 @@ function veUndo() {
     toast('Undone ✓', 'ok');
   } else {
     // DOCX uses contentEditable — browser undo works natively
+    // ponytail: browser contentEditable undo stack is the only reliable path
     document.execCommand('undo', false, null);
   }
 }
@@ -8645,7 +8784,7 @@ function applyVisualEdit() {
     S.codeStore.set(art.id, entry);
     const blk = document.getElementById(art.id);
     if (blk) {
-      blk.dataset.raw = btoa(unescape(encodeURIComponent(newCode)));
+      blk.dataset.raw = utf8ToB64(newCode);
       const pre = blk.querySelector('pre');
       if (pre) pre.innerHTML = buildLineTable(highlightCode(esc(newCode), entry.lang));
     }
@@ -8710,7 +8849,7 @@ function applyArtEdit() {
     // Update DOM block
     const blk = document.getElementById(art.id);
     if (blk) {
-      const newRawB64 = btoa(unescape(encodeURIComponent(newCode)));
+      const newRawB64 = utf8ToB64(newCode);
       blk.dataset.raw = newRawB64;
       const pre = blk.querySelector('pre');
       if (pre) pre.innerHTML = buildLineTable(highlightCode(esc(newCode), entry.lang));
@@ -8738,7 +8877,7 @@ function applyArtEdit() {
 function previewDocBlock(id, fmt) {
   const blk = document.getElementById(id);
   if (!blk) return;
-  const raw = blk.dataset.raw ? decodeURIComponent(escape(atob(blk.dataset.raw))) : blk.querySelector('pre')?.innerText || '';
+  const raw = blk.dataset.raw ? b64ToUtf8(blk.dataset.raw) : blk.querySelector('pre')?.innerText || '';
   let data;
   try { data = parseModelJSON(raw); } catch(e) { toast('Preview failed: invalid JSON — ' + e.message, 'er'); return; }
 
@@ -8760,6 +8899,7 @@ function previewDocBlock(id, fmt) {
 
 // Build a preview HTML using the current page setup settings (margins, size, orientation, page numbers)
 function buildDocxEditorPreviewHtml(innerHtml) {
+  if (typeof DOMPurify !== 'undefined') innerHtml = DOMPurify.sanitize(innerHtml, { ADD_TAGS: ['iframe'], ADD_ATTR: ['style', 'class', 'id'], ALLOW_DATA_ATTR: true });
   const ps   = _vePageSetup;
   const dims = _vePageSizes[ps.size] || _vePageSizes.A4;
   const w    = ps.orient === 'landscape' ? dims.h : dims.w;
@@ -9472,7 +9612,7 @@ async function testConn(){
     if (!S.geminiKey) { dbgLog('ERROR','No Gemini API key set.'); return; }
     dbgLog('INFO','Testing Gemini key via GET /v1beta/models...');
     try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(S.geminiKey)}&pageSize=5`);
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=5`, { headers: { 'X-Goog-Api-Key': S.geminiKey } });
       const d = await r.json();
       if (!r.ok) { dbgLog('ERROR',{status:r.status,body:d}); return; }
       dbgLog('RESPONSE',{status:r.status,modelCount:d.models?.length,first:d.models?.[0]?.name,keyOk:true});
@@ -9562,20 +9702,31 @@ function _gTokenValid() {
   return S.google.accessToken && Date.now() < S.google.tokenExpiry - 30000;
 }
 
-function googleSignIn() {
-  const clientId = GOOGLE_CLIENT_ID;
-  S.google.clientId = clientId;
+function _base64URLEncode(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
-  const scope = GOOGLE_SCOPES.join(' ');
+async function _pkceChallenge(verifier) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return _base64URLEncode(digest);
+}
+
+async function googleSignIn() {
   const redirectUri = location.origin + location.pathname;
+  const verifier = _base64URLEncode(crypto.getRandomValues(new Uint8Array(32)));
+
   const params = new URLSearchParams({
-    client_id: clientId,
+    client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
-    response_type: 'token',
-    scope,
+    response_type: 'code',
+    scope: GOOGLE_SCOPES.join(' '),
     include_granted_scopes: 'true',
     prompt: 'select_account',
+    code_challenge_method: 'S256',
   });
+
+  params.set('code_challenge', await _pkceChallenge(verifier));
 
   const popup = window.open(
     'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString(),
@@ -9583,38 +9734,53 @@ function googleSignIn() {
     'width=520,height=620,top=100,left=200'
   );
 
-  // Poll popup for token in fragment
   const poll = setInterval(async () => {
     try {
-      if (!popup || popup.closed) {
-        clearInterval(poll);
-        return;
-      }
+      if (!popup || popup.closed) { clearInterval(poll); return; }
       let href = '';
-      try { href = popup.location.href; } catch(e) { return; } // cross-origin, still loading
-      if (href.includes(redirectUri) || href.startsWith(redirectUri)) {
+      try { href = popup.location.href; } catch(e) { return; }
+      if (href.startsWith(redirectUri)) {
         clearInterval(poll);
         popup.close();
-        const fragment = href.split('#')[1] || '';
-        const fParams = new URLSearchParams(fragment);
-        const token = fParams.get('access_token');
-        const expiresIn = parseInt(fParams.get('expires_in') || '3600');
-        if (token) {
-          S.google.accessToken = token;
-          S.google.tokenExpiry = Date.now() + expiresIn * 1000;
-          await _gFetchUserInfo();
-          _gUpdateUI();
-          _gPersist();
-          // [MODIFIED] No tool registration — Google is only used for chat history sync
-          // Attempt to restore chat history from Drive on sign-in
-          toast('Google signed in — loading your chat history…', 'ok');
-          await _restoreChatsFromDrive();
-        } else {
-          toast('Google sign-in cancelled or failed', 'er');
-        }
+        const code = new URL(href).searchParams.get('code');
+        if (!code) { toast('Google sign-in cancelled or failed', 'er'); return; }
+        await _exchangeCodeForToken(code, verifier);
       }
-    } catch(e) {}
+    } catch(e) { console.warn('Atlas: OAuth poll error (expected during cross-origin redirect)', e.message); }
   }, 300);
+}
+
+async function _exchangeCodeForToken(code, verifier) {
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        redirect_uri: location.origin + location.pathname,
+        grant_type: 'authorization_code',
+        code_verifier: verifier,
+      }),
+    });
+    const data = await r.json();
+    if (!data.access_token) {
+      toast('Google sign-in failed: ' + (data.error_description || data.error || 'unknown'), 'er');
+      return;
+    }
+    S.google.accessToken = data.access_token;
+    S.google.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+    // ponytail: refresh_token is only returned on first consent; re-auth needed on expiry
+    S.google.refreshToken = data.refresh_token || null;
+    await _gFetchUserInfo();
+    _gUpdateUI();
+    _gPersist();
+    toast('Google signed in — loading your chat history…', 'ok');
+    await _restoreChatsFromDrive();
+  } catch(e) {
+    toast('Google sign-in network error', 'er');
+    console.warn('Atlas: token exchange failed', e);
+  }
 }
 
 async function _gFetchUserInfo() {
@@ -9910,15 +10076,15 @@ openSettings = function() {
 
 
 (function(){
-  var handle = document.getElementById('art-resize-handle');
-  var panel  = document.getElementById('artifact-panel');
+  const handle = document.getElementById('art-resize-handle');
+  const panel  = document.getElementById('artifact-panel');
   if (!handle || !panel) return;
-  var startX, startW;
+  let startX, startW;
   handle.addEventListener('mousedown', function(e){
     e.preventDefault();
     // Read actual rendered width at drag start — panel may be display:none so
     // use the inline style width if set, else fall back to CSS computed value
-    var inlineW = parseFloat(panel.style.width);
+    const inlineW = parseFloat(panel.style.width);
     if (inlineW > 0) {
       startW = inlineW;
     } else {
@@ -9928,20 +10094,20 @@ openSettings = function() {
     startX = e.clientX;
     handle.classList.add('dragging');
     // Prevent iframe from swallowing mousemove events during drag
-    var cover = document.createElement('div');
+    const cover = document.createElement('div');
     cover.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize';
     document.body.appendChild(cover);
-    var main = document.getElementById('main');
-    var onMove = function(ev){
-      var dx = startX - ev.clientX;
-      var nw = Math.min(Math.max(startW + dx, 300), window.innerWidth * 0.92);
+    const main = document.getElementById('main');
+    const onMove = function(ev){
+      const dx = startX - ev.clientX;
+      const nw = Math.min(Math.max(startW + dx, 300), window.innerWidth * 0.92);
       panel.style.width = nw + 'px';
       // Reflow chat area + conversation history live
       if (main && window.innerWidth > 600) {
         main.style.marginRight = nw + 'px';
       }
     };
-    var onUp = function(){
+    const onUp = function(){
       handle.classList.remove('dragging');
       cover.remove();
       document.removeEventListener('mousemove', onMove);
@@ -9964,7 +10130,7 @@ async function _sendWithLocalModel(text) {
   // Build message for display
   const userIdx = S.msgs.length;
   S.msgs.push({ role: 'user', content: text });
-  appendMsg(userIdx);
+  appendMsgEl(S.msgs[userIdx]);
 
   const inp = document.getElementById('user-input');
   if (inp) { inp.value = ''; autoResize(inp); }
@@ -9982,40 +10148,62 @@ async function _sendWithLocalModel(text) {
     ? [{ role: 'system', content: sysprompt }, ...historyMsgs]
     : historyMsgs;
 
-  // Create placeholder assistant bubble
+  // Create assistant row with thinking indicator (matches Gemini branch pattern)
   const aIdx = S.msgs.length;
   S.msgs.push({ role: 'assistant', content: '' });
-  appendMsg(aIdx);
-  const bubble = document.getElementById('bubble-' + aIdx);
-  const mdEl   = bubble ? bubble.querySelector('.md-content') || bubble : bubble;
+  const ca = document.getElementById('chat-area');
+  const sid = 'loc-' + Date.now();
+  const aiRow = document.createElement('div');
+  aiRow.className = 'msg-row ai';
+  const sEl = document.createElement('div'); sEl.className = 'md-body'; sEl.id = sid;
+  // Insert thinking indicator inside sEl
+  const thinkId = 't-' + Date.now();
+  sEl.innerHTML = `<div class="thinking-row" id="${thinkId}"><div class="t-dots"><span></span><span></span><span></span></div><span class="thinking-label">Loading model…</span></div>`;
+  const av = document.createElement('div'); av.className = 'avatar aav'; av.textContent = '✦';
+  const mb = document.createElement('div'); mb.className = 'msg-body';
+  const bub = document.createElement('div'); bub.className = 'msg-bubble';
+  bub.appendChild(sEl); mb.appendChild(bub);
+  aiRow.appendChild(av); aiRow.appendChild(mb);
+  ca.appendChild(aiRow); scrollBottom();
 
   S.streaming = true;
   const sendBtn = document.getElementById('send-btn');
   if (sendBtn) { sendBtn.classList.add('stop'); sendBtn.innerHTML = '⏹'; }
 
   let fullText = '';
+  let _appended = false;
   try {
     fullText = await LocalModelManager.generateResponse(apiMessages, (delta, isStatus) => {
-      if (isStatus) return; // skip loading progress tokens
-      fullText += delta;
-      // Live-update the bubble with rendered markdown
-      if (mdEl) {
-        try {
-          mdEl.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
-        } catch {
-          mdEl.textContent = fullText;
+      // Show loading progress in thinking indicator
+      if (isStatus) {
+        const thinkEl = document.getElementById(thinkId);
+        if (thinkEl) {
+          const lbl = thinkEl.querySelector('.thinking-label');
+          if (lbl) lbl.textContent = delta.replace('__STATUS__', '').trim() || 'Loading…';
         }
+        return;
       }
-      scrollToBottom();
+      // First real token: remove thinking indicator
+      if (!_appended) {
+        _appended = true;
+        const thinkEl = document.getElementById(thinkId);
+        if (thinkEl) thinkEl.remove();
+        sEl.innerHTML = '';
+      }
+      fullText += delta;
+      try { sEl.innerHTML = DOMPurify.sanitize(marked.parse(fullText)); }
+      catch { sEl.textContent = fullText; }
+      scrollBottom();
     });
 
     S.msgs[aIdx].content = fullText;
-    if (mdEl) {
-      try { mdEl.innerHTML = DOMPurify.sanitize(marked.parse(fullText)); }
-      catch { mdEl.textContent = fullText; }
+    if (!_appended) {
+      const thinkEl = document.getElementById(thinkId);
+      if (thinkEl) thinkEl.remove();
     }
+    try { sEl.innerHTML = DOMPurify.sanitize(marked.parse(fullText)); }
+    catch { sEl.textContent = fullText; }
 
-    // Persist conversation
     if (typeof saveCurrentConv === 'function') saveCurrentConv();
     else if (typeof persist === 'function') persist();
 
@@ -10024,7 +10212,9 @@ async function _sendWithLocalModel(text) {
     console.error('[LocalModel] generateResponse error:', err);
     const errMsg = `⚠ Local model error: ${err.message || err}`;
     S.msgs[aIdx].content = errMsg;
-    if (mdEl) mdEl.textContent = errMsg;
+    const thinkEl = document.getElementById(thinkId);
+    if (thinkEl) thinkEl.remove();
+    sEl.textContent = errMsg;
     toast('Local model error — check console', 'er');
   } finally {
     S.streaming = false;
@@ -10053,34 +10243,78 @@ const LocalModelManager = (() => {
   const LS_CACHED   = 'atlas-local-model-downloaded';
 
   const MODELS = [
-    { id: 'TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC', label: 'TinyLlama 1.1B',  size: '638 MB' },
-    { id: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2 1.7B',    size: '980 MB' },
-    { id: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma 2B',         size: '1.2 GB' },
+    { id: 'TinyLlama-1.1B-Chat-v0.4-q4f32_1-MLC', label: 'TinyLlama 1.1B',     size: '638 MB' },
+    { id: 'stablelm-2-zephyr-1_6b-q4f32_1-MLC',    label: 'StableLM 2 1.6B',    size: '900 MB' },
+    { id: 'gemma-2b-it-q4f32_1-MLC',               label: 'Gemma 2B',           size: '1.2 GB' },
   ];
 
   // ── Internal state ────────────────────────────────────────────────────────
   let _engine       = null;   // WebLLM MLCEngine instance
   let _loadedModel  = null;   // model id currently loaded in _engine
   let _downloading  = false;
+  let _gpuStatus    = null;   // null=unprobed | { ok:bool, name:string }
 
   // ── Persisted helpers ──────────────────────────────────────────────────────
   function _getCached() {
-    try { return JSON.parse(localStorage.getItem(LS_CACHED) || '[]'); } catch { return []; }
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_CACHED) || '[]');
+      const valid = raw.filter(id => MODELS.some(m => m.id === id));
+      if (valid.length !== raw.length) _setCached(valid);
+      return valid;
+    } catch { return []; }
   }
   function _setCached(arr) {
     try { localStorage.setItem(LS_CACHED, JSON.stringify(arr)); } catch {}
   }
   function _getSelected() {
-    return localStorage.getItem(LS_MODEL) || MODELS[0].id;
+    const stored = localStorage.getItem(LS_MODEL);
+    if (stored && MODELS.some(m => m.id === stored)) return stored;
+    // Stale or missing — migrate to first current model
+    localStorage.setItem(LS_MODEL, MODELS[0].id);
+    return MODELS[0].id;
   }
   function _isEnabled() {
     return localStorage.getItem(LS_ENABLED) === 'true';
   }
 
+  let _probePromise = null;
+  /** Probe GPU adapter, trying hardware then software fallback. Caches result. */
+  async function _probeGPU() {
+    if (_gpuStatus) return _gpuStatus;
+    if (_probePromise) return _probePromise;
+    _probePromise = _doProbe();
+    return _probePromise;
+  }
+  async function _doProbe() {
+    let adapter = await navigator.gpu.requestAdapter();
+    if (adapter) {
+      _gpuStatus = {
+        ok: true,
+        name: adapter.name || 'GPU',
+        type: 'hw',
+        hasF16: adapter.features ? adapter.features.has('shader-f16') : false,
+      };
+      return _gpuStatus;
+    }
+    adapter = await navigator.gpu.requestAdapter({ forceFallbackAdapter: true });
+    if (adapter) {
+      _gpuStatus = {
+        ok: true,
+        name: (adapter.name || 'SwiftShader') + ' (software)',
+        type: 'sw',
+        hasF16: adapter.features ? adapter.features.has('shader-f16') : false,
+      };
+      return _gpuStatus;
+    }
+    _gpuStatus = { ok: false, name: 'No adapter found', type: null, hasF16: false };
+    return _gpuStatus;
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
-  /** Returns true if the browser supports WebGPU */
+  /** Returns true if the browser supports WebGPU (sync — consults cache if probed) */
   function checkWebGPUSupport() {
+    if (_gpuStatus) return _gpuStatus.ok;
     return !!navigator.gpu;
   }
 
@@ -10153,6 +10387,7 @@ const LocalModelManager = (() => {
    *  During model init:       report.progress is 0..1
    *  We extract % from the text when progress is 0 and text contains a fraction.
    */
+  let _progressWarned = false;
   function _parseProgress(report) {
     // Direct 0-1 float — model initialisation phase
     if (report.progress && report.progress > 0) {
@@ -10170,13 +10405,30 @@ const LocalModelManager = (() => {
     if (pctMatch) {
       return { pct: Math.min(99, Math.round(parseFloat(pctMatch[1]))), label: report.text };
     }
+    // Generic: extract any integer from text as a rough progress clue
+    if (report.text) {
+      const numMatch = report.text.match(/\d+/);
+      if (numMatch) {
+        const n = parseInt(numMatch[0]);
+        if (n > 0 && n <= 100) return { pct: n, label: report.text };
+        if (n > 100) return { pct: Math.min(99, Math.round(n / 100)), label: report.text };
+      }
+      if (!_progressWarned) {
+        _progressWarned = true;
+        console.log('[LocalModel] Unrecognized progress text:', report.text);
+      }
+    }
     return { pct: 0, label: report.text || 'Starting…' };
   }
 
   async function downloadSelected() {
-    if (!checkWebGPUSupport()) {
-      toast('WebGPU not available in this browser', 'er');
+    const gpu = await _probeGPU();
+    if (!gpu.ok) {
+      toast('WebGPU adapter not found — enable brave://flags/#enable-unsafe-swiftshader or use Chrome 113+', 'er');
       return;
+    }
+    if (gpu.type === 'sw') {
+      toast('Using software WebGPU (SwiftShader) — downloads and inference will be slow', '');
     }
     if (_downloading) return;
 
@@ -10184,6 +10436,14 @@ const LocalModelManager = (() => {
     if (isModelDownloaded(modelId)) {
       toast('Model already downloaded', 'ok');
       _refreshSettingsUI();
+      return;
+    }
+
+    // Check if the selected model requires shader-f16
+    const selectedId = _getSelected();
+    if (selectedId.includes('f16') && !gpu.hasF16) {
+      const tip = 'Launch from terminal with: --enable-dawn-features=allow_unsafe_apis';
+      toast(`Model requires shader-f16 (unavailable on your GPU). ${tip}`, 'er');
       return;
     }
 
@@ -10229,6 +10489,7 @@ const LocalModelManager = (() => {
       const cached = _getCached();
       if (!cached.includes(modelId)) cached.push(modelId);
       _setCached(cached);
+      _addToModelList();
 
       _updateProgress(100, 'Complete ✓');
       _setStatus('ready', 'Ready to use');
@@ -10273,6 +10534,11 @@ const LocalModelManager = (() => {
    * @returns {Promise<string>}        Full response text
    */
   async function generateResponse(messages, onToken) {
+    const gpu = await _probeGPU();
+    if (!gpu.ok) {
+      throw new Error('WebGPU adapter unavailable. Enable brave://flags/#enable-unsafe-swiftshader and restart.');
+    }
+
     const modelId = _getSelected();
     if (!isModelDownloaded(modelId)) {
       throw new Error('Local model not downloaded. Please download it in Settings → Local Model.');
@@ -10398,13 +10664,23 @@ const LocalModelManager = (() => {
       }).join('');
     }
 
-    // WebGPU warning
+    // WebGPU warning + adapter info
     const warn = document.getElementById('webgpu-warning');
-    if (warn) warn.style.display = checkWebGPUSupport() ? 'none' : 'block';
+    if (warn) {
+      if (checkWebGPUSupport()) {
+        warn.style.display = 'none';
+      } else {
+        warn.style.display = 'block';
+        warn.textContent = _gpuStatus?.type === 'sw'
+          ? '⚠ Using software WebGPU (SwiftShader) — responses will be slow'
+          : 'WebGPU not available — enable brave://flags/#enable-unsafe-swiftshader or use Chrome 113+';
+      }
+    }
   }
 
   /** Called from openSettings() to sync UI on open */
-  function initSettingsUI() {
+  async function initSettingsUI() {
+    await _probeGPU(); // warm adapter cache for UI
     _refreshSettingsUI();
     // Check if WebLLM library is loaded; disable download button if not yet ready
     const dlBtn = document.getElementById('local-model-dl-btn');
@@ -10424,6 +10700,33 @@ const LocalModelManager = (() => {
         _refreshSettingsUI();
       });
     }
+  }
+
+  /** Add a selectable entry in the main model dropdown for the downloaded local model */
+  function _addToModelList() {
+    const cached = getCachedModels();
+    if (!cached.length) return;
+    // Remove stale local-webgpu entries first
+    S.allModels = (S.allModels || []).filter(m => !m.id.startsWith('local-webgpu/'));
+    for (const modelId of cached) {
+      const m = MODELS.find(x => x.id === modelId);
+      if (!m) continue;
+      const entry = {
+        id: 'local-webgpu/' + modelId,
+        name: '🖥️ ' + m.label,
+        provider: 'local-webgpu',
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 4096,
+        description: 'Local WebGPU model — runs entirely in-browser',
+        architecture: { modality: 'text->text' },
+      };
+      if (!S.allModels.find(x => x.id === entry.id)) {
+        S.allModels.push(entry);
+        S.filtModels = [...S.allModels];
+      }
+    }
+    renderModelList();
+    updateImageModelDropdown();
   }
 
   // ── Topbar indicator ───────────────────────────────────────────────────────
@@ -10456,6 +10759,7 @@ const LocalModelManager = (() => {
     fallbackEnabledButNotDownloaded,
     initSettingsUI,
     showLocalModelIndicator,
+    addToModelList: _addToModelList,
   };
 })();
 // ── END LocalModelManager ──────────────────────────────────────────────────
@@ -10692,4 +10996,17 @@ function _akdClick() {
   }, 150);
 }
 
+// ── DATA-ATTRIBUTE DELEGATION (onclick→data-click, onmousedown→data-mdown) ──
+// Uses direct eval so module-scoped functions (`S`, `sendMessage`, etc.) are accessible.
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-click]');
+  if (!el) return;
+  const body = el.getAttribute('data-click').replace(/\bevent\b/g, 'e').replace(/\bthis\b(?=[,)]|\.)/g, 'el');
+  eval(body);
+});
+document.addEventListener('mousedown', e => {
+  const el = e.target.closest('[data-mdown]');
+  if (!el) return;
+  eval(el.getAttribute('data-mdown'));
+});
 // ── END INLINE API KEY + SIDEBAR FOOTER ───────────────────────────────────

@@ -19,17 +19,19 @@
 <!-- File generation libraries (loaded on demand) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="atlas.css">
-<!-- [NEW] WebLLM — loaded as ESM via dynamic import, stored on window.webllm -->
-<script type="module">
-  try {
-    const wl = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js');
-    window.webllm = wl;
-    window.dispatchEvent(new CustomEvent('webllm-ready', { detail: wl }));
-    console.log('[Atlas] WebLLM loaded ✓');
-  } catch (e) {
-    console.warn('[Atlas] WebLLM failed to load:', e);
-    window.dispatchEvent(new CustomEvent('webllm-ready', { detail: null }));
-  }
+<!-- WebLLM — dynamic import using global import() (works under file://) -->
+<script>
+  (async () => {
+    try {
+      const wl = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js');
+      window.webllm = wl;
+      window.dispatchEvent(new CustomEvent('webllm-ready', { detail: wl }));
+      console.log('[Atlas] WebLLM loaded ✓');
+    } catch (e) {
+      console.warn('[Atlas] WebLLM failed to load:', e);
+      window.dispatchEvent(new CustomEvent('webllm-ready', { detail: null }));
+    }
+  })();
 </script>
 </head>
 <body>
@@ -41,15 +43,15 @@
     Your API key and chats are saved in memory only this session — they won't persist when you close this tab.
     <span style="color:#8888aa">To persist: bookmark this page or use an HTTP server.</span>
   </div>
-  <button onclick="document.getElementById('origin-banner').style.display='none'" style="background:rgba(124,106,255,.2);border:1px solid rgba(124,106,255,.4);border-radius:6px;color:#7c6aff;padding:5px 14px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0">Got it ✕</button>
+  <button data-click="document.getElementById('origin-banner').style.display='none'" style="background:rgba(124,106,255,.2);border:1px solid rgba(124,106,255,.4);border-radius:6px;color:#7c6aff;padding:5px 14px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0">Got it ✕</button>
 </div>
 
-<div id="sov" onclick="closeSb()"></div>
+<div id="sov" data-click="closeSb()"></div>
 
   <div id="sidebar">
     <div class="sb-hd">
       <div class="logo">Atlas</div>
-      <button class="nb" onclick="newChat()">
+      <button class="nb" data-click="newChat()">
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         New
       </button>
@@ -59,7 +61,7 @@
     <div id="chatlist"></div>
     <div class="sb-ft">
       <!-- [MODIFIED] Sidebar footer: Google sign-in or API key status -->
-      <div id="sb-google-signed-in" style="display:none;padding:8px 10px;border-radius:var(--rs);background:var(--surf);border:1px solid var(--bdr);margin-bottom:6px;cursor:pointer" onclick="openSettings()" title="Google account — click to open settings">
+      <div id="sb-google-signed-in" style="display:none;padding:8px 10px;border-radius:var(--rs);background:var(--surf);border:1px solid var(--bdr);margin-bottom:6px;cursor:pointer" data-click="openSettings()" title="Google account — click to open settings">
         <div style="display:flex;align-items:center;gap:8px">
           <div id="sb-google-avatar-wrap" style="width:26px;height:26px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex-shrink:0;overflow:hidden">
             <span id="sb-google-avatar-initial">G</span>
@@ -71,7 +73,7 @@
           </div>
         </div>
       </div>
-      <div class="akd" id="akd-area" onclick="_akdClick()">
+      <div class="akd" id="akd-area" data-click="_akdClick()">
         <div class="akdot off" id="key-dot"></div>
         <div class="akt" id="key-text">Sign in or add API key</div>
       </div>
@@ -80,12 +82,12 @@
 
   <div id="main">
     <div id="topbar">
-      <button class="tsb-btn" onclick="toggleSb()" title="Toggle sidebar">
+      <button class="tsb-btn" data-click="toggleSb()" title="Toggle sidebar">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2.5" width="14" height="1.4" rx=".7" fill="currentColor"/><rect x="1" y="7.3" width="14" height="1.4" rx=".7" fill="currentColor"/><rect x="1" y="12.1" width="14" height="1.4" rx=".7" fill="currentColor"/></svg>
       </button>
 
       <div id="msw">
-        <button id="msbtn" onclick="toggleMdd()">
+        <button id="msbtn" data-click="toggleMdd()">
           <span class="m-icon" id="m-icon">🤖</span>
           <span class="m-name" id="m-name">Select a model</span>
           <span class="m-price" id="m-price"></span>
@@ -94,22 +96,22 @@
         <div id="mdd">
           <div class="dd-search-wrap"><input type="text" class="dd-search" id="model-search" placeholder="Search models…" oninput="filterModels(this.value)"></div>
           <div class="dd-filters" id="dd-filters">
-            <span class="fchip-f active" data-f="all" onclick="setFilter('all',this)">All</span>
-            <span class="fchip-f" data-f="free" onclick="setFilter('free',this)">Free</span>
-            <span class="fchip-f" data-f="vision" onclick="setFilter('vision',this)">Vision</span>
-            <span class="fchip-f" data-f="image" onclick="setFilter('image',this)">🖼️ Image Gen</span>
-            <span class="fchip-f" data-f="tool_use" onclick="setFilter('tool_use',this)">🔧 Tool Use</span>
-            <span class="fchip-f" data-f="openai" onclick="setFilter('openai',this)">OpenAI</span>
-            <span class="fchip-f" data-f="anthropic" onclick="setFilter('anthropic',this)">Anthropic</span>
-            <span class="fchip-f" data-f="google" onclick="setFilter('google',this)">Google</span>
-            <span class="fchip-f" data-f="meta" onclick="setFilter('meta',this)">Meta</span>
-            <span class="fchip-f" data-f="mistral" onclick="setFilter('mistral',this)">Mistral</span>
+            <span class="fchip-f active" data-f="all" data-click="setFilter('all',this)">All</span>
+            <span class="fchip-f" data-f="free" data-click="setFilter('free',this)">Free</span>
+            <span class="fchip-f" data-f="vision" data-click="setFilter('vision',this)">Vision</span>
+            <span class="fchip-f" data-f="image" data-click="setFilter('image',this)">🖼️ Image Gen</span>
+            <span class="fchip-f" data-f="tool_use" data-click="setFilter('tool_use',this)">🔧 Tool Use</span>
+            <span class="fchip-f" data-f="openai" data-click="setFilter('openai',this)">OpenAI</span>
+            <span class="fchip-f" data-f="anthropic" data-click="setFilter('anthropic',this)">Anthropic</span>
+            <span class="fchip-f" data-f="google" data-click="setFilter('google',this)">Google</span>
+            <span class="fchip-f" data-f="meta" data-click="setFilter('meta',this)">Meta</span>
+            <span class="fchip-f" data-f="mistral" data-click="setFilter('mistral',this)">Mistral</span>
           </div>
           <div id="modellist"><div class="m-loading">Enter API key to load models</div></div>
         </div>
       </div>
 
-      <div id="cost-tracker" onclick="openSettings()">
+      <div id="cost-tracker" data-click="openSettings()">
         <span class="ct-label">Spent</span>
         <span id="cost-val">$0.0000</span>
         <span class="ct-div">|</span>
@@ -118,12 +120,12 @@
       </div>
 
       <!-- [ADDED] Security status indicator in topbar -->
-      <button id="sec-status-btn" onclick="openSettings()" title="Storage security status — click to open settings"
+      <button id="sec-status-btn" data-click="openSettings()" title="Storage security status — click to open settings"
         style="background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:var(--rx);font-size:13px;transition:all .15s;display:flex;align-items:center;gap:4px;color:var(--tx3);flex-shrink:0">
         <span id="sec-status-icon">⚠️</span>
       </button>
 
-      <button class="set-icon-btn" onclick="openSettings()" title="Settings">
+      <button class="set-icon-btn" data-click="openSettings()" title="Settings">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" stroke-width="1.3"/><path d="M13.7 9.3l-.9-.5a5.2 5.2 0 000-1.6l.9-.5a1 1 0 00.4-1.4l-.8-1.3a1 1 0 00-1.4-.3l-.9.5A5.1 5.1 0 009 3.8V2.8A1 1 0 008 1.8H6.5a1 1 0 00-1 1V3.8a5.1 5.1 0 00-1.9 1.1l-.9-.5a1 1 0 00-1.4.3l-.8 1.3a1 1 0 00.4 1.4l.9.5a5.2 5.2 0 000 1.6l-.9.5a1 1 0 00-.4 1.4l.8 1.3a1 1 0 001.4.3l.9-.5A5.1 5.1 0 005.5 13v1a1 1 0 001 1H8a1 1 0 001-1v-1a5.1 5.1 0 001.9-1.1l.9.5a1 1 0 001.4-.3l.8-1.3a1 1 0 00-.3-1.5z" stroke="currentColor" stroke-width="1.1"/></svg>
       </button>
 
@@ -132,7 +134,7 @@
     <!-- CONTEXT BAR -->
     <div id="ctx-bar">
       <span id="ctx-label">No model</span>
-      <div id="ctx-track" onclick="toggleCtxTip()">
+      <div id="ctx-track" data-click="toggleCtxTip()">
         <div id="ctx-fill" style="width:0%"></div>
         <div id="ctx-tip"><div id="ctx-tip-row"></div></div>
       </div>
@@ -149,7 +151,7 @@
       <div id="sys-bar">
         <div class="sys-hdr">
           <span class="sys-lbl">System Prompt</span>
-          <button class="sys-close" onclick="toggleSys()">✕</button>
+          <button class="sys-close" data-click="toggleSys()">✕</button>
         </div>
         <textarea id="sys-input" rows="2" placeholder="You are a helpful assistant…"></textarea>
       </div>
@@ -160,42 +162,42 @@
         <div class="clarify-actions" id="clarify-options"></div>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="clarify-hint">Answering helps get a better response</span>
-          <button class="clarify-skip" onclick="dismissClarify()">Skip →</button>
+          <button class="clarify-skip" data-click="dismissClarify()">Skip →</button>
         </div>
       </div>
       <div id="active-skill-pill">
         <span class="pill-icon" id="pill-icon">✦</span>
         <span id="pill-name">Skill</span>
-        <button class="pill-dismiss" onclick="setActiveSkill(null)" title="Dismiss skill">✕</button>
+        <button class="pill-dismiss" data-click="setActiveSkill(null)" title="Dismiss skill">✕</button>
       </div>
-      <div id="detected-intent-pill" onclick="applyDetectedIntent()">
+      <div id="detected-intent-pill" data-click="applyDetectedIntent()">
         <span class="pill-icon" id="detected-icon">🧠</span>
         <span id="detected-name">Detected</span>
         <button class="use-btn" title="Use this skill">Use</button>
-        <button class="dismiss-btn" onclick="dismissDetectedIntent(event)" title="Dismiss">✕</button>
+        <button class="dismiss-btn" data-click="dismissDetectedIntent(event)" title="Dismiss">✕</button>
       </div>
       <div id="input-box">
         <textarea id="user-input" rows="1" placeholder="Message Atlas…" onkeydown="handleKey(event)" oninput="autoResize(this);updateEst();updateCtxBar();scheduleTokenUpdate();checkIntentOnInput(this.value)"></textarea>
         <div class="input-actions">
-          <button class="i-btn" onclick="document.getElementById('file-input').click()" title="Attach file">
+          <button class="i-btn" data-click="document.getElementById('file-input').click()" title="Attach file">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 8l-5.3 5.3a3.7 3.7 0 01-5.2-5.2L8.7 2.7a2.3 2.3 0 013.2 3.2L6.2 11.6a.9.9 0 01-1.3-1.3L10.5 4.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           </button>
-          <button class="i-btn" id="fmt-btn" onclick="toggleFmtBar()" title="Output file format">
+          <button class="i-btn" id="fmt-btn" data-click="toggleFmtBar()" title="Output file format">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M10 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
           </button>
-          <button class="i-btn" id="image-gen-btn" onclick="toggleImageGen()" title="Image generation mode">
+          <button class="i-btn" id="image-gen-btn" data-click="toggleImageGen()" title="Image generation mode">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="5.5" cy="6.5" r="1.2" stroke="currentColor" stroke-width="1.1"/><path d="M1 11l3.5-3.5 3 2.5L11 6l4 5" stroke="currentColor" stroke-width="1.2"/></svg>
           </button>
-          <button class="i-btn" id="sys-btn" onclick="toggleSys()" title="System prompt">
+          <button class="i-btn" id="sys-btn" data-click="toggleSys()" title="System prompt">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           </button>
-          <button class="i-btn" id="skills-btn" onclick="event.stopPropagation();openSettings(); document.getElementById('settings-modal').scrollTop=5000" title="Skills (in Settings)" style="display:none">
+          <button class="i-btn" id="skills-btn" data-click="event.stopPropagation();openSettings(); document.getElementById('settings-modal').scrollTop=5000" title="Skills (in Settings)" style="display:none">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1l1.8 3.6L14 5.4l-3 2.9.7 4.1L8 10.4l-3.7 2 .7-4.1L2 5.4l4.2-.8z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
           </button>
-          <button class="i-btn" id="web-search-btn" onclick="toggleWebSearch()" title="Web search (OpenRouter plugin)">
+          <button class="i-btn" id="web-search-btn" data-click="toggleWebSearch()" title="Web search (OpenRouter plugin)">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.3"/><path d="M7 2a5 5 0 010 10M7 2a5 5 0 000 10M2 7h10" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M11.5 11.5l2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           </button>
-          <button id="send-btn" onclick="sendMessage()" disabled>
+          <button id="send-btn" data-click="sendMessage()" disabled>
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5h10M6.5 1.5l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </div>
@@ -211,7 +213,7 @@
   <div id="msg-nav">
     <div class="mnav-hd">
       <span class="mnav-lbl">In this chat</span>
-      <button class="mnav-close" onclick="toggleMsgNav()" title="Close">
+      <button class="mnav-close" data-click="toggleMsgNav()" title="Close">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 1l11 11M12 1L1 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       </button>
     </div>
@@ -222,12 +224,12 @@
     <div id="art-resize-handle" title="Drag to resize"></div>
     <div id="artifact-hdr">
       <span id="artifact-title">preview</span>
-      <button class="art-btn" id="art-view-toggle" onclick="toggleArtSource()">⟨/⟩ Source</button>
-      <button class="art-btn" id="art-edit-toggle" onclick="toggleArtEdit()">✏ Edit</button>
-      <button class="art-btn" onclick="openArtNewTab()">↗ New tab</button>
-      <button class="art-btn" onclick="dlArtifact()">⬇ Download</button>
-      <button class="art-btn" id="art-drive-btn" onclick="uploadArtToDrive()" style="display:none" title="Upload to Google Drive">☁ Drive</button>
-      <button class="art-btn close" onclick="closeArtifact()">✕ Close</button>
+      <button class="art-btn" id="art-view-toggle" data-click="toggleArtSource()">⟨/⟩ Source</button>
+      <button class="art-btn" id="art-edit-toggle" data-click="toggleArtEdit()">✏ Edit</button>
+      <button class="art-btn" data-click="openArtNewTab()">↗ New tab</button>
+      <button class="art-btn" data-click="dlArtifact()">⬇ Download</button>
+      <button class="art-btn" id="art-drive-btn" data-click="uploadArtToDrive()" style="display:none" title="Upload to Google Drive">☁ Drive</button>
+      <button class="art-btn close" data-click="closeArtifact()">✕ Close</button>
     </div>
     <div id="artifact-tabs"></div>
     <div id="artifact-frame-wrap">
@@ -236,8 +238,8 @@
       <div id="artifact-editor" style="display:none;flex-direction:column;height:100%;background:var(--base)">
         <div style="padding:8px 12px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx3)">
           <span>✏ Editing — changes are saved to context when you click Apply</span>
-          <button class="art-btn" style="margin-left:auto" onclick="applyArtEdit()">✓ Apply</button>
-          <button class="art-btn close" onclick="cancelArtEdit()">✕ Cancel</button>
+          <button class="art-btn" style="margin-left:auto" data-click="applyArtEdit()">✓ Apply</button>
+          <button class="art-btn close" data-click="cancelArtEdit()">✕ Cancel</button>
         </div>
         <textarea id="artifact-edit-area" spellcheck="false" style="flex:1;width:100%;padding:14px 16px;background:var(--base);color:var(--tx1);border:none;outline:none;resize:none;font-family:'DM Mono',monospace;font-size:13px;line-height:1.6;tab-size:2"></textarea>
       </div>
@@ -248,9 +250,9 @@
           <div class="ve-ribbon-tabs">
             <div class="ve-ribbon-tab active" id="ve-tab-label">Document</div>
             <div class="ve-ribbon-spacer"></div>
-            <button class="ve-ribbon-action" id="ve-undo-btn" onclick="veUndo()" title="Undo (Ctrl+Z)" style="opacity:.7">↩ Undo</button>
-            <button class="ve-ribbon-action apply" onclick="applyVisualEdit()">✓ Apply</button>
-            <button class="ve-ribbon-action cancel" onclick="cancelVisualEdit()">✕ Cancel</button>
+            <button class="ve-ribbon-action" id="ve-undo-btn" data-click="veUndo()" title="Undo (Ctrl+Z)" style="opacity:.7">↩ Undo</button>
+            <button class="ve-ribbon-action apply" data-click="applyVisualEdit()">✓ Apply</button>
+            <button class="ve-ribbon-action cancel" data-click="cancelVisualEdit()">✕ Cancel</button>
           </div>
           <!-- PPTX formatting toolbar (hidden for DOCX) -->
           <div class="ve-fmt-bar ve-ppt-fmt-bar" id="ve-ppt-fmt-bar" style="display:none;flex-wrap:wrap;gap:2px 4px;padding:5px 8px">
@@ -268,14 +270,14 @@
             <input class="ve-font-size-input" id="ve-ppt-size" type="number" value="36" min="8" max="120" title="Title font size" onchange="vePptSetSize(this.value)">
             <div class="ve-fmt-sep"></div>
             <!-- Style group -->
-            <button class="ve-fmt-btn" id="vp-bold"      onclick="vePptToggle('bold')"      title="Bold"><b>B</b></button>
-            <button class="ve-fmt-btn" id="vp-italic"    onclick="vePptToggle('italic')"    title="Italic"><i>I</i></button>
-            <button class="ve-fmt-btn" id="vp-underline" onclick="vePptToggle('underline')" title="Underline"><u>U</u></button>
+            <button class="ve-fmt-btn" id="vp-bold"      data-click="vePptToggle('bold')"      title="Bold"><b>B</b></button>
+            <button class="ve-fmt-btn" id="vp-italic"    data-click="vePptToggle('italic')"    title="Italic"><i>I</i></button>
+            <button class="ve-fmt-btn" id="vp-underline" data-click="vePptToggle('underline')" title="Underline"><u>U</u></button>
             <div class="ve-fmt-sep"></div>
             <!-- Align group -->
-            <button class="ve-fmt-btn" id="vp-left"   onclick="vePptAlign('left')"   title="Align left"   style="font-size:15px;letter-spacing:-1px">⇤</button>
-            <button class="ve-fmt-btn" id="vp-center" onclick="vePptAlign('center')" title="Center"        style="font-size:15px">≡</button>
-            <button class="ve-fmt-btn" id="vp-right"  onclick="vePptAlign('right')"  title="Align right"  style="font-size:15px;letter-spacing:-1px">⇥</button>
+            <button class="ve-fmt-btn" id="vp-left"   data-click="vePptAlign('left')"   title="Align left"   style="font-size:15px;letter-spacing:-1px">⇤</button>
+            <button class="ve-fmt-btn" id="vp-center" data-click="vePptAlign('center')" title="Center"        style="font-size:15px">≡</button>
+            <button class="ve-fmt-btn" id="vp-right"  data-click="vePptAlign('right')"  title="Align right"  style="font-size:15px;letter-spacing:-1px">⇥</button>
             <div class="ve-fmt-sep"></div>
             <!-- Color group -->
             <button class="ve-color-btn" id="vp-title-color-btn" title="Title text color" style="background:#7c6aff">
@@ -296,9 +298,9 @@
             </select>
             <div class="ve-fmt-sep"></div>
             <!-- Slide ops group -->
-            <button class="ve-fmt-btn" onclick="vePptDuplicateSlide()" title="Duplicate slide" style="font-size:12px">⧉ Dup</button>
-            <button class="ve-fmt-btn" onclick="vePptMoveSlide(-1)"   title="Move slide left"  style="font-size:13px">◀</button>
-            <button class="ve-fmt-btn" onclick="vePptMoveSlide(1)"    title="Move slide right" style="font-size:13px">▶</button>
+            <button class="ve-fmt-btn" data-click="vePptDuplicateSlide()" title="Duplicate slide" style="font-size:12px">⧉ Dup</button>
+            <button class="ve-fmt-btn" data-click="vePptMoveSlide(-1)"   title="Move slide left"  style="font-size:13px">◀</button>
+            <button class="ve-fmt-btn" data-click="vePptMoveSlide(1)"    title="Move slide right" style="font-size:13px">▶</button>
             <div class="ve-fmt-sep"></div>
             <!-- Transition -->
             <select class="ve-fmt-select" id="ve-ppt-transition" title="Slide transition" onchange="vePptSetTransition(this.value)" style="min-width:100px">
@@ -309,11 +311,11 @@
             </select>
             <div class="ve-fmt-sep"></div>
             <!-- Insert group -->
-            <button class="ve-fmt-btn" onclick="vePptInsertImage()" title="Insert image" style="font-size:13px">🖼</button>
-            <button class="ve-fmt-btn" onclick="vePptInsertShape()" title="Insert divider" style="font-size:13px">─</button>
+            <button class="ve-fmt-btn" data-click="vePptInsertImage()" title="Insert image" style="font-size:13px">🖼</button>
+            <button class="ve-fmt-btn" data-click="vePptInsertShape()" title="Insert divider" style="font-size:13px">─</button>
             <div class="ve-fmt-sep"></div>
             <!-- Present -->
-            <button class="ve-fmt-btn" onclick="vePptPresent()" title="Present slideshow" style="font-size:12px;color:#4caf7d;border-color:rgba(76,175,125,.4)">▶ Present</button>
+            <button class="ve-fmt-btn" data-click="vePptPresent()" title="Present slideshow" style="font-size:12px;color:#4caf7d;border-color:rgba(76,175,125,.4)">▶ Present</button>
             <div class="ve-fmt-sep"></div>
             <!-- Background colors inline in toolbar -->
             <span style="font-size:10px;color:rgba(255,255,255,.45);font-family:'DM Sans',sans-serif;letter-spacing:.3px;padding:0 2px">BG</span>
@@ -323,7 +325,7 @@
           </div>
           <!-- DOCX formatting bar (hidden for PPTX) -->
           <div class="ve-fmt-bar" id="ve-fmt-bar">
-            <select class="ve-fmt-select" id="ve-font-family" onmousedown="veSaveSelection()" onchange="veExecFormat('fontName',this.value)" title="Font">
+            <select class="ve-fmt-select" id="ve-font-family" data-mdown="veSaveSelection()" onchange="veExecFormat('fontName',this.value)" title="Font">
               <option value="Georgia">Georgia</option>
               <option value="'Times New Roman',serif">Times New Roman</option>
               <option value="'Calibri',sans-serif">Calibri</option>
@@ -340,7 +342,7 @@
               <option value="'Courier New',monospace">Courier New</option>
               <option value="'Lucida Console',monospace">Lucida Console</option>
             </select>
-            <input class="ve-font-size-input" id="ve-font-size" type="number" value="13" min="8" max="72" title="Font size" onmousedown="veSaveSelection()" onchange="veExecFormat('fontSize',this.value)">
+            <input class="ve-font-size-input" id="ve-font-size" type="number" value="13" min="8" max="72" title="Font size" data-mdown="veSaveSelection()" onchange="veExecFormat('fontSize',this.value)">
             <div class="ve-fmt-sep"></div>
             <select class="ve-fmt-select" id="ve-para-style" onchange="veApplyParaStyle(this.value)" title="Paragraph style">
               <option value="p">Normal</option>
@@ -350,69 +352,69 @@
               <option value="title">Title</option>
             </select>
             <div class="ve-fmt-sep"></div>
-            <button class="ve-fmt-btn" id="vfb-bold" onclick="veExecCmd('bold')" title="Bold (Ctrl+B)"><b>B</b></button>
-            <button class="ve-fmt-btn" id="vfb-italic" onclick="veExecCmd('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
-            <button class="ve-fmt-btn" id="vfb-underline" onclick="veExecCmd('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
+            <button class="ve-fmt-btn" id="vfb-bold" data-click="veExecCmd('bold')" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button class="ve-fmt-btn" id="vfb-italic" data-click="veExecCmd('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button class="ve-fmt-btn" id="vfb-underline" data-click="veExecCmd('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
             <div class="ve-fmt-sep"></div>
             <!-- Alignment group - proper SVG icons -->
-            <button class="ve-fmt-btn" id="vfb-left"    onmousedown="veSaveSelection()" onclick="veExecFormat('justifyLeft','');    veSetAlignBtns('left')"    title="Align left (Ctrl+L)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
-            <button class="ve-fmt-btn" id="vfb-center"  onmousedown="veSaveSelection()" onclick="veExecFormat('justifyCenter',''); veSetAlignBtns('center')"  title="Center (Ctrl+E)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="3" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="4" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
-            <button class="ve-fmt-btn" id="vfb-right"   onmousedown="veSaveSelection()" onclick="veExecFormat('justifyRight','');  veSetAlignBtns('right')"   title="Align right (Ctrl+R)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="5" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="7" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
-            <button class="ve-fmt-btn" id="vfb-justify" onmousedown="veSaveSelection()" onclick="veExecFormat('justifyFull','');   veSetAlignBtns('justify')" title="Justify"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="5.5" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="12.5" width="12" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <button class="ve-fmt-btn" id="vfb-left"    data-mdown="veSaveSelection()" data-click="veExecFormat('justifyLeft','');    veSetAlignBtns('left')"    title="Align left (Ctrl+L)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <button class="ve-fmt-btn" id="vfb-center"  data-mdown="veSaveSelection()" data-click="veExecFormat('justifyCenter',''); veSetAlignBtns('center')"  title="Center (Ctrl+E)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="3" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="4" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <button class="ve-fmt-btn" id="vfb-right"   data-mdown="veSaveSelection()" data-click="veExecFormat('justifyRight','');  veSetAlignBtns('right')"   title="Align right (Ctrl+R)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="5" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="7" y="12.5" width="6" height="1.5" rx=".75" fill="currentColor"/></svg></button>
+            <button class="ve-fmt-btn" id="vfb-justify" data-mdown="veSaveSelection()" data-click="veExecFormat('justifyFull','');   veSetAlignBtns('justify')" title="Justify"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="5.5" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="9" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="1" y="12.5" width="12" height="1.5" rx=".75" fill="currentColor"/></svg></button>
             <div class="ve-fmt-sep"></div>
             <!-- Extra styles -->
-            <button class="ve-fmt-btn" id="vfb-strike" onmousedown="veSaveSelection()" onclick="veExecCmd('strikeThrough')" title="Strikethrough"><s>S</s></button>
-            <button class="ve-fmt-btn" id="vfb-sub"    onmousedown="veSaveSelection()" onclick="veExecCmd('subscript')"    title="Subscript">x<sub>2</sub></button>
-            <button class="ve-fmt-btn" id="vfb-sup"    onmousedown="veSaveSelection()" onclick="veExecCmd('superscript')"  title="Superscript">x<sup>2</sup></button>
+            <button class="ve-fmt-btn" id="vfb-strike" data-mdown="veSaveSelection()" data-click="veExecCmd('strikeThrough')" title="Strikethrough"><s>S</s></button>
+            <button class="ve-fmt-btn" id="vfb-sub"    data-mdown="veSaveSelection()" data-click="veExecCmd('subscript')"    title="Subscript">x<sub>2</sub></button>
+            <button class="ve-fmt-btn" id="vfb-sup"    data-mdown="veSaveSelection()" data-click="veExecCmd('superscript')"  title="Superscript">x<sup>2</sup></button>
             <div class="ve-fmt-sep"></div>
             <!-- Indent / Outdent -->
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('outdent')"  title="Decrease indent (Shift+Tab)">⇤</button>
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('indent')"   title="Increase indent (Tab)">⇥</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veExecCmd('outdent')"  title="Decrease indent (Shift+Tab)">⇤</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veExecCmd('indent')"   title="Increase indent (Tab)">⇥</button>
             <div class="ve-fmt-sep"></div>
             <!-- Lists -->
-            <button class="ve-fmt-btn" id="vfb-ul" onmousedown="veSaveSelection()" onclick="veToggleList('ul')" title="Bullet list">• ≡</button>
-            <button class="ve-fmt-btn" id="vfb-ol" onmousedown="veSaveSelection()" onclick="veToggleList('ol')" title="Numbered list">1. ≡</button>
+            <button class="ve-fmt-btn" id="vfb-ul" data-mdown="veSaveSelection()" data-click="veToggleList('ul')" title="Bullet list">• ≡</button>
+            <button class="ve-fmt-btn" id="vfb-ol" data-mdown="veSaveSelection()" data-click="veToggleList('ol')" title="Numbered list">1. ≡</button>
             <div class="ve-fmt-sep"></div>
             <!-- Colors -->
-            <button class="ve-color-btn" id="ve-txt-color-btn" title="Text color" style="background:#e8c000" onmousedown="veSaveSelection()">
+            <button class="ve-color-btn" id="ve-txt-color-btn" title="Text color" style="background:#e8c000" data-mdown="veSaveSelection()">
               <input type="color" value="#1a1a1a" oninput="veExecFormat('foreColor',this.value); this.parentElement.style.background=this.value">
             </button>
-            <button class="ve-color-btn" id="ve-hl-color-btn" title="Highlight color" style="background:#ffff00" onmousedown="veSaveSelection()">
+            <button class="ve-color-btn" id="ve-hl-color-btn" title="Highlight color" style="background:#ffff00" data-mdown="veSaveSelection()">
               <input type="color" value="#ffff00" oninput="veExecFormat('hiliteColor',this.value); this.parentElement.style.background=this.value">
             </button>
             <div class="ve-fmt-sep"></div>
             <!-- Clear formatting -->
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('removeFormat')" title="Clear formatting">✕ fmt</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veExecCmd('removeFormat')" title="Clear formatting">✕ fmt</button>
             <div class="ve-fmt-sep"></div>
             <!-- Insert group -->
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veInsertTable()"                        title="Insert table">⊞ Table</button>
-            <button class="ve-fmt-btn"                                  onclick="veInsertImage()"                        title="Insert image">🖼 Img</button>
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veInsertLink()"                         title="Insert link (Ctrl+K)">🔗 Link</button>
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veInsertPageBreak()"                    title="Insert page break">⎙ PgBrk</button>
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('insertHorizontalRule')"      title="Horizontal rule">─ HR</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veInsertTable()"                        title="Insert table">⊞ Table</button>
+            <button class="ve-fmt-btn"                                  data-click="veInsertImage()"                        title="Insert image">🖼 Img</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veInsertLink()"                         title="Insert link (Ctrl+K)">🔗 Link</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veInsertPageBreak()"                    title="Insert page break">⎙ PgBrk</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veExecCmd('insertHorizontalRule')"      title="Horizontal rule">─ HR</button>
             <div class="ve-fmt-sep"></div>
             <!-- Undo / Redo -->
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('undo')"  title="Undo (Ctrl+Z)">↩</button>
-            <button class="ve-fmt-btn" onmousedown="veSaveSelection()" onclick="veExecCmd('redo')"  title="Redo (Ctrl+Y)">↪</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veExecCmd('undo')"  title="Undo (Ctrl+Z)">↩</button>
+            <button class="ve-fmt-btn" data-mdown="veSaveSelection()" data-click="veExecCmd('redo')"  title="Redo (Ctrl+Y)">↪</button>
             <div class="ve-fmt-sep"></div>
             <!-- Find & Replace -->
-            <button class="ve-fmt-btn" onclick="veOpenFindReplace()" title="Find &amp; Replace (Ctrl+H)">🔍 F&amp;R</button>
+            <button class="ve-fmt-btn" data-click="veOpenFindReplace()" title="Find &amp; Replace (Ctrl+H)">🔍 F&amp;R</button>
             <div class="ve-fmt-sep"></div>
             <!-- Word count + Print -->
-            <button class="ve-fmt-btn" id="vfb-wc" onclick="veShowWordCount()" title="Word count">Wc</button>
-            <button class="ve-fmt-btn" onclick="vePrint()" title="Print document">🖨</button>
+            <button class="ve-fmt-btn" id="vfb-wc" data-click="veShowWordCount()" title="Word count">Wc</button>
+            <button class="ve-fmt-btn" data-click="vePrint()" title="Print document">🖨</button>
             <div class="ve-fmt-sep"></div>
-            <button class="ve-fmt-btn" onclick="veOpenPageSetup()" title="Page setup" style="font-weight:700;color:#aac4ff">⚙ Page</button>
+            <button class="ve-fmt-btn" data-click="veOpenPageSetup()" title="Page setup" style="font-weight:700;color:#aac4ff">⚙ Page</button>
             <input type="file" id="ve-img-input" accept="image/*" style="display:none" onchange="veHandleImageUpload(this)">
           </div>
           <!-- Find & Replace bar -->
           <div id="ve-fnr-bar">
             <input id="ve-fnr-find"    placeholder="Find…"    style="padding:3px 8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:3px;color:#fff;font-size:11px;outline:none;width:130px">
             <input id="ve-fnr-replace" placeholder="Replace…" style="padding:3px 8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:3px;color:#fff;font-size:11px;outline:none;width:130px">
-            <button class="ve-fmt-btn" onclick="veFnrNext()"    title="Find next">▼ Next</button>
-            <button class="ve-fmt-btn" onclick="veFnrReplace()" title="Replace once">Replace</button>
-            <button class="ve-fmt-btn" onclick="veFnrReplaceAll()" title="Replace all">All</button>
-            <button class="ve-fmt-btn" onclick="veCloseFindReplace()" style="color:#ffaaaa">✕</button>
+            <button class="ve-fmt-btn" data-click="veFnrNext()"    title="Find next">▼ Next</button>
+            <button class="ve-fmt-btn" data-click="veFnrReplace()" title="Replace once">Replace</button>
+            <button class="ve-fmt-btn" data-click="veFnrReplaceAll()" title="Replace all">All</button>
+            <button class="ve-fmt-btn" data-click="veCloseFindReplace()" style="color:#ffaaaa">✕</button>
             <span id="ve-fnr-count" style="font-size:10px;color:rgba(255,255,255,.5)"></span>
           </div>
         </div>
@@ -421,25 +423,25 @@
   <div style="background:#1a2540;border-radius:10px;padding:24px 28px;min-width:380px;max-width:460px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.5);color:#e0e6f0;font-family:'DM Sans',sans-serif">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:#fff">⚙ Page Setup</h3>
-      <button onclick="veClosePageSetup()" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;line-height:1">✕</button>
+      <button data-click="veClosePageSetup()" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;line-height:1">✕</button>
     </div>
     <!-- Page Size -->
     <div style="margin-bottom:14px">
       <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Page Size</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="ve-ps-chip active" data-size="A4"      onclick="vePageSetupChip(this,'size')">A4</button>
-        <button class="ve-ps-chip"        data-size="Letter"  onclick="vePageSetupChip(this,'size')">Letter</button>
-        <button class="ve-ps-chip"        data-size="Legal"   onclick="vePageSetupChip(this,'size')">Legal</button>
-        <button class="ve-ps-chip"        data-size="A3"      onclick="vePageSetupChip(this,'size')">A3</button>
-        <button class="ve-ps-chip"        data-size="A5"      onclick="vePageSetupChip(this,'size')">A5</button>
+        <button class="ve-ps-chip active" data-size="A4"      data-click="vePageSetupChip(this,'size')">A4</button>
+        <button class="ve-ps-chip"        data-size="Letter"  data-click="vePageSetupChip(this,'size')">Letter</button>
+        <button class="ve-ps-chip"        data-size="Legal"   data-click="vePageSetupChip(this,'size')">Legal</button>
+        <button class="ve-ps-chip"        data-size="A3"      data-click="vePageSetupChip(this,'size')">A3</button>
+        <button class="ve-ps-chip"        data-size="A5"      data-click="vePageSetupChip(this,'size')">A5</button>
       </div>
     </div>
     <!-- Orientation -->
     <div style="margin-bottom:14px">
       <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Orientation</label>
       <div style="display:flex;gap:6px">
-        <button class="ve-ps-chip active" data-orient="portrait"  onclick="vePageSetupChip(this,'orient')">◻ Portrait</button>
-        <button class="ve-ps-chip"        data-orient="landscape" onclick="vePageSetupChip(this,'orient')">▭ Landscape</button>
+        <button class="ve-ps-chip active" data-orient="portrait"  data-click="vePageSetupChip(this,'orient')">◻ Portrait</button>
+        <button class="ve-ps-chip"        data-orient="landscape" data-click="vePageSetupChip(this,'orient')">▭ Landscape</button>
       </div>
     </div>
     <!-- Margins -->
@@ -460,25 +462,25 @@
     <div style="margin-bottom:14px">
       <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Page Numbers</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="ve-ps-chip active" data-pgnum="none"   onclick="vePageSetupChip(this,'pgnum')">None</button>
-        <button class="ve-ps-chip"        data-pgnum="bottom-center" onclick="vePageSetupChip(this,'pgnum')">Bottom Center</button>
-        <button class="ve-ps-chip"        data-pgnum="bottom-right"  onclick="vePageSetupChip(this,'pgnum')">Bottom Right</button>
-        <button class="ve-ps-chip"        data-pgnum="top-center"    onclick="vePageSetupChip(this,'pgnum')">Top Center</button>
-        <button class="ve-ps-chip"        data-pgnum="top-right"     onclick="vePageSetupChip(this,'pgnum')">Top Right</button>
+        <button class="ve-ps-chip active" data-pgnum="none"   data-click="vePageSetupChip(this,'pgnum')">None</button>
+        <button class="ve-ps-chip"        data-pgnum="bottom-center" data-click="vePageSetupChip(this,'pgnum')">Bottom Center</button>
+        <button class="ve-ps-chip"        data-pgnum="bottom-right"  data-click="vePageSetupChip(this,'pgnum')">Bottom Right</button>
+        <button class="ve-ps-chip"        data-pgnum="top-center"    data-click="vePageSetupChip(this,'pgnum')">Top Center</button>
+        <button class="ve-ps-chip"        data-pgnum="top-right"     data-click="vePageSetupChip(this,'pgnum')">Top Right</button>
       </div>
     </div>
     <!-- Column count -->
     <div style="margin-bottom:18px">
       <label style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8899bb;display:block;margin-bottom:5px">Columns</label>
       <div style="display:flex;gap:6px">
-        <button class="ve-ps-chip active" data-cols="1" onclick="vePageSetupChip(this,'cols')">1 Column</button>
-        <button class="ve-ps-chip"        data-cols="2" onclick="vePageSetupChip(this,'cols')">2 Columns</button>
-        <button class="ve-ps-chip"        data-cols="3" onclick="vePageSetupChip(this,'cols')">3 Columns</button>
+        <button class="ve-ps-chip active" data-cols="1" data-click="vePageSetupChip(this,'cols')">1 Column</button>
+        <button class="ve-ps-chip"        data-cols="2" data-click="vePageSetupChip(this,'cols')">2 Columns</button>
+        <button class="ve-ps-chip"        data-cols="3" data-click="vePageSetupChip(this,'cols')">3 Columns</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button onclick="veClosePageSetup()" style="padding:7px 18px;background:#1e3055;border:1px solid #2a4a8a;border-radius:5px;color:#aac;font-size:12px;cursor:pointer">Cancel</button>
-      <button onclick="veApplyPageSetup()" style="padding:7px 18px;background:#2b579a;border:none;border-radius:5px;color:#fff;font-size:12px;cursor:pointer;font-weight:700">Apply</button>
+      <button data-click="veClosePageSetup()" style="padding:7px 18px;background:#1e3055;border:1px solid #2a4a8a;border-radius:5px;color:#aac;font-size:12px;cursor:pointer">Cancel</button>
+      <button data-click="veApplyPageSetup()" style="padding:7px 18px;background:#2b579a;border:none;border-radius:5px;color:#fff;font-size:12px;cursor:pointer;font-weight:700">Apply</button>
     </div>
   </div>
 </div>
@@ -487,13 +489,13 @@
         <div id="ve-body" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
         <!-- Floating block toolbar for word editor -->
         <div class="ve-block-toolbar" id="ve-block-toolbar">
-          <button class="ve-bt-btn" id="vbt-h1" onclick="veSetBlockType('h1')" title="Heading 1">H1</button>
-          <button class="ve-bt-btn" id="vbt-h2" onclick="veSetBlockType('h2')" title="Heading 2">H2</button>
-          <button class="ve-bt-btn" id="vbt-h3" onclick="veSetBlockType('h3')" title="Heading 3">H3</button>
-          <button class="ve-bt-btn" id="vbt-p"  onclick="veSetBlockType('p')"  title="Normal text">¶</button>
-          <button class="ve-bt-btn" id="vbt-li" onclick="veSetBlockType('li')" title="Bullet">•</button>
+          <button class="ve-bt-btn" id="vbt-h1" data-click="veSetBlockType('h1')" title="Heading 1">H1</button>
+          <button class="ve-bt-btn" id="vbt-h2" data-click="veSetBlockType('h2')" title="Heading 2">H2</button>
+          <button class="ve-bt-btn" id="vbt-h3" data-click="veSetBlockType('h3')" title="Heading 3">H3</button>
+          <button class="ve-bt-btn" id="vbt-p"  data-click="veSetBlockType('p')"  title="Normal text">¶</button>
+          <button class="ve-bt-btn" id="vbt-li" data-click="veSetBlockType('li')" title="Bullet">•</button>
           <div class="ve-bt-sep"></div>
-          <button class="ve-bt-btn" onclick="veDeleteBlock()" title="Delete block" style="color:#c00">✕</button>
+          <button class="ve-bt-btn" data-click="veDeleteBlock()" title="Delete block" style="color:#c00">✕</button>
         </div>
       </div>
     </div>
@@ -512,8 +514,8 @@
       <div class="settings-row">
         <span class="settings-row-label">Theme</span>
         <div style="display:flex;gap:6px">
-          <button id="theme-dark-btn" onclick="setTheme('dark')" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);border:1px solid var(--acc2);color:#fff">🌙 Dark</button>
-          <button id="theme-light-btn" onclick="setTheme('light')" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);border:1px solid var(--bdr);color:var(--tx2)">☀️ Light</button>
+          <button id="theme-dark-btn" data-click="setTheme('dark')" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);border:1px solid var(--acc2);color:#fff">🌙 Dark</button>
+          <button id="theme-light-btn" data-click="setTheme('light')" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);border:1px solid var(--bdr);color:var(--tx2)">☀️ Light</button>
         </div>
       </div>
       <div class="settings-row">
@@ -589,7 +591,7 @@
         </div>
         <div style="font-size:10px;color:var(--tx3);margin-top:3px;line-height:1.5">Tier is detected automatically from your API key. Paid tier users get cost tracking enabled.</div>
       </div>
-      <div style="margin-top:10px"><button class="modal-btn secondary" onclick="resetCost()" style="font-size:11px;padding:6px 12px">Reset counter</button></div>
+      <div style="margin-top:10px"><button class="modal-btn secondary" data-click="resetCost()" style="font-size:11px;padding:6px 12px">Reset counter</button></div>
     </div>
     <div class="divider"></div>
     <!-- [CHANGED] Memory → Storage & Security section -->
@@ -599,7 +601,7 @@
       <!-- Insecure storage warning banner -->
       <div id="insecure-storage-warning" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,95,109,.1);border:1px solid rgba(255,95,109,.35);border-radius:var(--rs);font-size:11px;color:var(--red);line-height:1.55">
         ⚠ <strong>Insecure API keys detected</strong> — Your API keys were found in localStorage. Migrate them to secure storage below.
-        <button onclick="migrateFromLocalStorage()" style="margin-left:8px;padding:2px 8px;background:var(--red);border:none;border-radius:4px;color:#fff;font-size:10px;cursor:pointer">Migrate now</button>
+        <button data-click="migrateFromLocalStorage()" style="margin-left:8px;padding:2px 8px;background:var(--red);border:none;border-radius:4px;color:#fff;font-size:10px;cursor:pointer">Migrate now</button>
       </div>
 
       <!-- Storage usage meter -->
@@ -627,15 +629,15 @@
       <!-- Key storage buttons -->
       <div style="font-size:11px;color:var(--tx2);margin-bottom:6px;font-weight:500">API Key Persistence</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-        <button class="modal-btn secondary" onclick="saveCurrentKeySessionOnly()" style="font-size:11px;padding:6px 12px">⏱ This session only</button>
-        <button class="modal-btn secondary" onclick="saveCurrentKeyToBrowser()" style="font-size:11px;padding:6px 12px">🔒 Save in browser</button>
+        <button class="modal-btn secondary" data-click="saveCurrentKeySessionOnly()" style="font-size:11px;padding:6px 12px">⏱ This session only</button>
+        <button class="modal-btn secondary" data-click="saveCurrentKeyToBrowser()" style="font-size:11px;padding:6px 12px">🔒 Save in browser</button>
       </div>
 
       <!-- Data actions -->
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="modal-btn secondary" onclick="exportAllData()" style="font-size:11px;padding:6px 12px">⬇ Export chats</button>
-        <button class="modal-btn secondary" onclick="document.getElementById('import-file-input').click()" style="font-size:11px;padding:6px 12px">⬆ Import chats</button>
-        <button class="modal-btn secondary" onclick="clearAllDataConfirm()" style="font-size:11px;padding:6px 12px;color:var(--red)">🗑 Clear all data</button>
+        <button class="modal-btn secondary" data-click="exportAllData()" style="font-size:11px;padding:6px 12px">⬇ Export chats</button>
+        <button class="modal-btn secondary" data-click="document.getElementById('import-file-input').click()" style="font-size:11px;padding:6px 12px">⬆ Import chats</button>
+        <button class="modal-btn secondary" data-click="clearAllDataConfirm()" style="font-size:11px;padding:6px 12px;color:var(--red)">🗑 Clear all data</button>
       </div>
       <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllData(this)">
     </div>
@@ -645,10 +647,10 @@
       <div style="font-size:11px;color:var(--tx3);margin-bottom:8px;line-height:1.55">Injected into every conversation. Sets tone, format, and behavior across all models.</div>
       <textarea id="global-sysprompt-input" style="width:100%;min-height:110px;padding:9px 12px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--tx1);font-size:clamp(11px,1.4vw,12px);font-family:'DM Mono',monospace;outline:none;resize:vertical;transition:border-color .15s;line-height:1.6" oninput="this.style.borderColor='var(--acc2)'" onblur="this.style.borderColor='var(--bdr)'"></textarea>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-        <button class="modal-btn secondary" onclick="applyPresetPrompt('smart')" style="font-size:10px;padding:4px 10px">✦ Smart</button>
-        <button class="modal-btn secondary" onclick="applyPresetPrompt('concise')" style="font-size:10px;padding:4px 10px">⚡ Concise</button>
-        <button class="modal-btn secondary" onclick="applyPresetPrompt('technical')" style="font-size:10px;padding:4px 10px">🔧 Technical</button>
-        <button class="modal-btn secondary" onclick="applyPresetPrompt('clear')" style="font-size:10px;padding:4px 10px">🧹 Clear</button>
+        <button class="modal-btn secondary" data-click="applyPresetPrompt('smart')" style="font-size:10px;padding:4px 10px">✦ Smart</button>
+        <button class="modal-btn secondary" data-click="applyPresetPrompt('concise')" style="font-size:10px;padding:4px 10px">⚡ Concise</button>
+        <button class="modal-btn secondary" data-click="applyPresetPrompt('technical')" style="font-size:10px;padding:4px 10px">🔧 Technical</button>
+        <button class="modal-btn secondary" data-click="applyPresetPrompt('clear')" style="font-size:10px;padding:4px 10px">🧹 Clear</button>
       </div>
     </div>
     <div class="divider"></div>
@@ -672,15 +674,15 @@
       <!-- Available Skills List -->
       <div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Available Skills:</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        <div class="skill-badge" data-skill="frontend" onclick="setActiveSkill('frontend')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎨 Frontend</div>
-        <div class="skill-badge" data-skill="document" onclick="setActiveSkill('document')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">📄 Document</div>
-        <div class="skill-badge" data-skill="code" onclick="setActiveSkill('code')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">💻 Code</div>
-        <div class="skill-badge" data-skill="analysis" onclick="setActiveSkill('analysis')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🧠 Analysis</div>
-        <div class="skill-badge" data-skill="data" onclick="setActiveSkill('data')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">📊 Data</div>
-        <div class="skill-badge" data-skill="gamedev" onclick="setActiveSkill('gamedev')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎮 Game</div>
-        <div class="skill-badge" data-skill="creative" onclick="setActiveSkill('creative')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎭 Creative</div>
+        <div class="skill-badge" data-skill="frontend" data-click="setActiveSkill('frontend')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎨 Frontend</div>
+        <div class="skill-badge" data-skill="document" data-click="setActiveSkill('document')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">📄 Document</div>
+        <div class="skill-badge" data-skill="code" data-click="setActiveSkill('code')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">💻 Code</div>
+        <div class="skill-badge" data-skill="analysis" data-click="setActiveSkill('analysis')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🧠 Analysis</div>
+        <div class="skill-badge" data-skill="data" data-click="setActiveSkill('data')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">📊 Data</div>
+        <div class="skill-badge" data-skill="gamedev" data-click="setActiveSkill('gamedev')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎮 Game</div>
+        <div class="skill-badge" data-skill="creative" data-click="setActiveSkill('creative')" style="padding:4px 10px;background:var(--elev);border:1px solid var(--bdr);border-radius:12px;font-size:11px;color:var(--tx2);cursor:pointer">🎭 Creative</div>
       </div>
-      <button class="modal-btn secondary" onclick="openSkillsModalFromSettings()" style="margin-top:12px;width:100%">Manage All Skills →</button>
+      <button class="modal-btn secondary" data-click="openSkillsModalFromSettings()" style="margin-top:12px;width:100%">Manage All Skills →</button>
     </div>
     <div class="divider"></div>
     <div class="settings-group">
@@ -693,7 +695,7 @@
     <div class="settings-group" id="google-signin-section">
       <div class="modal-label">Google Account</div>
       <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;line-height:1.55">Sign in with Google to automatically save and sync your chat history to Google Drive. Chats are stored in your personal Drive as a private file.</div>
-      <button class="gconn-btn" id="gconn-signin-btn" onclick="googleSignIn()">
+      <button class="gconn-btn" id="gconn-signin-btn" data-click="googleSignIn()">
         <div class="gconn-avatar-placeholder" id="gconn-avatar-placeholder">
           <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.566 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
         </div>
@@ -704,8 +706,8 @@
         <span class="gconn-status off" id="gconn-status-badge">Not signed in</span>
       </button>
       <div id="gconn-signout-wrap" style="display:none;margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="modal-btn secondary" onclick="gDriveSyncNow()" style="font-size:11px;padding:6px 12px">☁ Sync now</button>
-        <button class="modal-btn secondary" onclick="googleSignOut()" style="font-size:11px;padding:6px 12px;color:var(--red)">🔌 Sign out</button>
+        <button class="modal-btn secondary" data-click="gDriveSyncNow()" style="font-size:11px;padding:6px 12px">☁ Sync now</button>
+        <button class="modal-btn secondary" data-click="googleSignOut()" style="font-size:11px;padding:6px 12px;color:var(--red)">🔌 Sign out</button>
       </div>
       <div id="gconn-sync-status" style="display:none;margin-top:8px;font-size:10px;color:var(--tx3)"></div>
     </div>
@@ -716,28 +718,28 @@
       <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;line-height:1.55">Keys are stored securely in the browser and never sent anywhere except the respective AI provider.</div>
       <!-- Provider tabs -->
       <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">
-        <button id="aks-btn-openrouter" onclick="aksSwitch('openrouter',this)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);color:#fff">OpenRouter</button>
-        <button id="aks-btn-deepseek"   onclick="aksSwitch('deepseek',this)"   style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">DeepSeek</button>
-        <button id="aks-btn-gemini"     onclick="aksSwitch('gemini',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Gemini</button>
-        <button id="aks-btn-openai"     onclick="aksSwitch('openai',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">OpenAI</button>
-        <button id="aks-btn-local"      onclick="aksSwitch('local',this)"      style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Local</button>
+        <button id="aks-btn-openrouter" data-click="aksSwitch('openrouter',this)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);color:#fff">OpenRouter</button>
+        <button id="aks-btn-deepseek"   data-click="aksSwitch('deepseek',this)"   style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">DeepSeek</button>
+        <button id="aks-btn-gemini"     data-click="aksSwitch('gemini',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Gemini</button>
+        <button id="aks-btn-openai"     data-click="aksSwitch('openai',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">OpenAI</button>
+        <button id="aks-btn-local"      data-click="aksSwitch('local',this)"      style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Local</button>
       </div>
       <!-- Key input area -->
       <div id="aks-local-url-wrap" style="display:none;margin-bottom:8px">
         <div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Server URL</div>
         <input type="text" id="aks-local-url" placeholder="http://localhost:11434" style="width:100%;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Mono',monospace;outline:none;box-sizing:border-box">
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">
-          <button onclick="document.getElementById('aks-local-url').value='http://localhost:11434'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">Ollama :11434</button>
-          <button onclick="document.getElementById('aks-local-url').value='http://localhost:1234'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">LM Studio :1234</button>
-          <button onclick="document.getElementById('aks-local-url').value='http://localhost:8080'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">llama.cpp :8080</button>
+          <button data-click="document.getElementById('aks-local-url').value='http://localhost:11434'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">Ollama :11434</button>
+          <button data-click="document.getElementById('aks-local-url').value='http://localhost:1234'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">LM Studio :1234</button>
+          <button data-click="document.getElementById('aks-local-url').value='http://localhost:8080'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">llama.cpp :8080</button>
         </div>
       </div>
       <div style="font-size:11px;color:var(--tx2);margin-bottom:4px" id="aks-key-label">API Key</div>
       <div id="aks-desc" style="font-size:10px;color:var(--tx3);margin-bottom:6px"></div>
       <div style="display:flex;gap:6px;align-items:center">
         <input type="password" id="aks-key-input" placeholder="Paste key here…" autocomplete="off" style="flex:1;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Mono',monospace;outline:none">
-        <button class="modal-btn primary" onclick="aksSaveKey()" style="font-size:12px;padding:7px 14px;flex-shrink:0">Connect</button>
-        <button class="modal-btn secondary" id="aks-clear-btn" onclick="aksClearKey()" style="font-size:12px;padding:7px 10px;flex-shrink:0;color:var(--red)">✕</button>
+        <button class="modal-btn primary" data-click="aksSaveKey()" style="font-size:12px;padding:7px 14px;flex-shrink:0">Connect</button>
+        <button class="modal-btn secondary" id="aks-clear-btn" data-click="aksClearKey()" style="font-size:12px;padding:7px 10px;flex-shrink:0;color:var(--red)">✕</button>
       </div>
       <div id="aks-err" style="color:var(--red);font-size:11px;margin-top:6px;display:none"></div>
       <div id="aks-ok" style="color:var(--grn);font-size:11px;margin-top:6px;display:none"></div>
@@ -768,9 +770,9 @@
       <!-- Model selector -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <select id="local-model-select" style="flex:1;padding:6px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Sans',sans-serif" onchange="LocalModelManager.setSelectedModel(this.value)">
-          <option value="TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC">TinyLlama 1.1B — 638 MB (fastest)</option>
-          <option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM2 1.7B — 980 MB</option>
-          <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2B — 1.2 GB (best quality)</option>
+          <option value="TinyLlama-1.1B-Chat-v0.4-q4f32_1-MLC">TinyLlama 1.1B — 638 MB (fastest)</option>
+          <option value="stablelm-2-zephyr-1_6b-q4f32_1-MLC">StableLM 2 1.6B — 900 MB</option>
+          <option value="gemma-2b-it-q4f32_1-MLC">Gemma 2B — 1.2 GB (best quality)</option>
         </select>
       </div>
 
@@ -778,8 +780,8 @@
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <div id="local-model-status-icon" class="lm-status-dot lm-status-none"></div>
         <span id="local-model-status-text" style="font-size:12px;color:var(--tx3);flex:1">Not downloaded</span>
-        <button id="local-model-dl-btn" class="modal-btn secondary" style="font-size:11px;padding:5px 12px" onclick="LocalModelManager.downloadSelected()">⬇ Download</button>
-        <button id="local-model-del-btn" class="modal-btn secondary" style="font-size:11px;padding:5px 12px;color:var(--red);display:none" onclick="LocalModelManager.deleteSelected()">🗑 Remove</button>
+        <button id="local-model-dl-btn" class="modal-btn secondary" style="font-size:11px;padding:5px 12px" data-click="LocalModelManager.downloadSelected()">⬇ Download</button>
+        <button id="local-model-del-btn" class="modal-btn secondary" style="font-size:11px;padding:5px 12px;color:var(--red);display:none" data-click="LocalModelManager.deleteSelected()">🗑 Remove</button>
       </div>
 
       <!-- Progress bar -->
@@ -798,8 +800,8 @@
     </div>
     <div class="divider"></div>
     <div class="modal-actions">
-      <button class="modal-btn secondary" onclick="closeSettings()">Cancel</button>
-      <button class="modal-btn primary" onclick="saveSettings()">Save</button>
+      <button class="modal-btn secondary" data-click="closeSettings()">Cancel</button>
+      <button class="modal-btn primary" data-click="saveSettings()">Save</button>
     </div>
   </div>
 </div>
@@ -809,7 +811,7 @@
   <div class="skill-edit-card">
     <div class="skill-edit-hdr">
       <span class="skill-edit-title" id="skill-edit-title">Edit Skill</span>
-      <button class="skills-close" onclick="closeSkillEdit()">✕</button>
+      <button class="skills-close" data-click="closeSkillEdit()">✕</button>
     </div>
     <div class="skill-edit-body">
       <div>
@@ -832,9 +834,9 @@
     <div class="skill-edit-footer">
       <span class="skill-edit-hint" id="skill-edit-hint"></span>
       <div style="display:flex;gap:8px">
-        <button class="modal-btn secondary" id="skill-reset-btn" onclick="resetBuiltinSkill()" style="font-size:12px;padding:6px 14px;display:none">↺ Reset</button>
-        <button class="modal-btn secondary" onclick="closeSkillEdit()" style="font-size:12px;padding:6px 14px">Cancel</button>
-        <button class="modal-btn primary" onclick="saveSkillEdit()" style="font-size:12px;padding:6px 14px">Save</button>
+        <button class="modal-btn secondary" id="skill-reset-btn" data-click="resetBuiltinSkill()" style="font-size:12px;padding:6px 14px;display:none">↺ Reset</button>
+        <button class="modal-btn secondary" data-click="closeSkillEdit()" style="font-size:12px;padding:6px 14px">Cancel</button>
+        <button class="modal-btn primary" data-click="saveSkillEdit()" style="font-size:12px;padding:6px 14px">Save</button>
       </div>
     </div>
   </div>
@@ -846,7 +848,7 @@
     <div class="skills-hdr">
       <span class="skills-hdr-title">✦ Skills</span>
       <span class="skills-hdr-sub" id="skills-auto-status"></span>
-      <button class="skills-close" onclick="closeSkillsModal()">✕</button>
+      <button class="skills-close" data-click="closeSkillsModal()">✕</button>
     </div>
     <div class="skills-body">
       <div>
@@ -861,14 +863,14 @@
         <div class="skills-section-label">Import Skill</div>
         <div class="skills-import">
           <div class="skills-import-tabs">
-            <button class="simp-tab active" onclick="switchImportTab('github',this)">🔗 GitHub URL</button>
-            <button class="simp-tab" onclick="switchImportTab('paste',this)">📋 Paste Text</button>
-            <button class="simp-tab" onclick="switchImportTab('file',this)">📁 Upload File</button>
+            <button class="simp-tab active" data-click="switchImportTab('github',this)">🔗 GitHub URL</button>
+            <button class="simp-tab" data-click="switchImportTab('paste',this)">📋 Paste Text</button>
+            <button class="simp-tab" data-click="switchImportTab('file',this)">📁 Upload File</button>
           </div>
           <div id="simp-github" class="simp-panel">
             <div class="skills-import-row">
               <input type="text" id="skill-gh-url" placeholder="https://github.com/user/repo/blob/main/skill.md" autocomplete="off">
-              <button class="skills-import-btn" onclick="importSkillFromGithub()">⬇ Fetch</button>
+              <button class="skills-import-btn" data-click="importSkillFromGithub()">⬇ Fetch</button>
             </div>
             <div style="font-size:10px;color:var(--tx3)">Accepts github.com blob URLs or raw.githubusercontent.com links</div>
           </div>
@@ -876,13 +878,13 @@
             <input type="text" id="skill-paste-name" placeholder="Skill name" style="margin-bottom:6px">
             <div class="skills-import-row">
               <textarea id="skill-paste-body" placeholder="Paste your skill system prompt here…"></textarea>
-              <button class="skills-import-btn" onclick="importSkillFromPaste()">＋ Add</button>
+              <button class="skills-import-btn" data-click="importSkillFromPaste()">＋ Add</button>
             </div>
           </div>
           <div id="simp-file" class="simp-panel" style="display:none">
             <div class="skills-import-row">
               <input type="text" id="skill-file-name" placeholder="Skill name (auto-filled from filename)">
-              <button class="skills-import-btn" onclick="document.getElementById('skill-file-input').click()">📁 Browse</button>
+              <button class="skills-import-btn" data-click="document.getElementById('skill-file-input').click()">📁 Browse</button>
             </div>
             <input type="file" id="skill-file-input" accept=".md,.txt,.text" style="display:none" onchange="importSkillFromFile(this)">
             <div style="font-size:10px;color:var(--tx3)">Supports .md and .txt files</div>
@@ -894,7 +896,7 @@
           <input type="checkbox" id="skill-auto-toggle" onchange="toggleSmartSkills(this.checked)" style="accent-color:var(--acc);width:14px;height:14px">
           <span>🧠 Smart auto-detect skill from message</span>
         </label>
-        <button class="skills-import-btn" style="font-size:11px;padding:5px 10px" onclick="setActiveSkill(null);closeSkillsModal()">✕ Clear skill</button>
+        <button class="skills-import-btn" style="font-size:11px;padding:5px 10px" data-click="setActiveSkill(null);closeSkillsModal()">✕ Clear skill</button>
       </div>
     </div>
   </div>
@@ -902,6 +904,7 @@
 
 <div id="toast"></div>
 
+<script src="modules/utils.js"></script>
 <script src="atlas.js"></script>
 
 <!-- TOOL CONFIRM MODAL -->
@@ -911,22 +914,22 @@
     <div class="tc-desc" id="tc-desc">The model wants to perform the following action:</div>
     <div class="tc-payload" id="tc-payload"></div>
     <div class="tc-actions">
-      <button class="modal-btn secondary" onclick="_tcResolve(false)">✕ Deny</button>
-      <button class="modal-btn primary" onclick="_tcResolve(true)" style="background:var(--grn);color:#000">✓ Allow</button>
+      <button class="modal-btn secondary" data-click="_tcResolve(false)">✕ Deny</button>
+      <button class="modal-btn primary" data-click="_tcResolve(true)" style="background:var(--grn);color:#000">✓ Allow</button>
     </div>
   </div>
 </div>
 
-<button id="dbg-tab" onclick="toggleDbg()">DEBUG</button>
+<button id="dbg-tab" data-click="toggleDbg()">DEBUG</button>
 <div id="dbg-panel">
   <div id="dbg-hdr">
     <span id="dbg-title">🔬 Debug Console</span>
     <span id="dbg-status">Idle</span>
-    <button class="dbg-btn" onclick="testConn()">⚡ Test Key</button>
-    <button class="dbg-btn" onclick="testRaw()">📡 Raw Request</button>
-    <button class="dbg-btn" onclick="testKnownModel()" style="background:#1a2e1a;border-color:#2dd4a0;color:#2dd4a0">✅ Test Known Model</button>
-    <button class="dbg-btn" onclick="clearDbg()">Clear</button>
-    <button class="dbg-btn" onclick="toggleDbg()">✕ Close</button>
+    <button class="dbg-btn" data-click="testConn()">⚡ Test Key</button>
+    <button class="dbg-btn" data-click="testRaw()">📡 Raw Request</button>
+    <button class="dbg-btn" data-click="testKnownModel()" style="background:#1a2e1a;border-color:#2dd4a0;color:#2dd4a0">✅ Test Known Model</button>
+    <button class="dbg-btn" data-click="clearDbg()">Clear</button>
+    <button class="dbg-btn" data-click="toggleDbg()">✕ Close</button>
   </div>
   <div id="dbg-log"><div style="color:#4e4e6a;padding:6px 0">Tap ⚡ Test Key or 📡 Raw Request to diagnose. Logs appear here during sends.</div></div>
 </div>
@@ -959,7 +962,7 @@
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 100 12A6 6 0 008 2z" stroke="currentColor" stroke-width="1.3"/><path d="M8 6v2l1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         Verify Phone at openrouter.ai/settings
       </a>
-      <button class="acct-btn-secondary" onclick="closeAcctModal()">Dismiss — I'll fix this later</button>
+      <button class="acct-btn-secondary" data-click="closeAcctModal()">Dismiss — I'll fix this later</button>
     </div>
     <div class="acct-note">Your API key <span id="acct-key-hint" style="font-family:'DM Mono',monospace;color:var(--acc)"></span> is valid. This is an account-level restriction, not a code issue.</div>
   </div>
