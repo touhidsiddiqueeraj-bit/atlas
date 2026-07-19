@@ -105,6 +105,7 @@ const S = {
   sbOpen: true, theme: 'dark',
   imageGenMode: false,
   webSearchMode: false,
+  agentMode: false,
   toolDefinitions: [],
   codeStore: new Map(), // blockId -> { lang, content } — used by patch edit system
   skills: {
@@ -1853,6 +1854,7 @@ function toggleImageGen() {
   S.imageGenMode = !S.imageGenMode;
   const btn = document.getElementById('image-gen-btn');
   if (S.imageGenMode) {
+    if (S.agentMode) toggleAgentMode();
     btn.classList.add('active');
     document.getElementById('user-input').placeholder = 'Describe the image you want to generate…';
     toast('🖼️ Image generation mode ON', 'ok');
@@ -1862,6 +1864,89 @@ function toggleImageGen() {
     toast('💬 Chat mode', 'ok');
   }
 }
+
+function toggleAgentMode() {
+  try {
+    S.agentMode = !S.agentMode;
+    const bar = document.getElementById('agent-bar');
+    const tog = document.getElementById('agent-bar-toggle');
+    const sub = document.getElementById('agent-bar-sub');
+    if (!bar || !tog || !sub) return;
+    if (S.agentMode) {
+      if (S.imageGenMode) toggleImageGen();
+      bar.classList.add('on');
+      tog.textContent = 'ON';
+      sub.textContent = _agentVfs._files.size + ' file' + (_agentVfs._files.size !== 1 ? 's' : '');
+      const inp = document.getElementById('user-input');
+      if (inp) inp.placeholder = 'Describe the project you want to build…';
+      toast('🛠 Agent mode ON — multi-file project generation', 'ok');
+    } else {
+      bar.classList.remove('on');
+      tog.textContent = 'OFF';
+      sub.textContent = 'Build multi-file projects';
+      const inp = document.getElementById('user-input');
+      if (inp) inp.placeholder = 'Message Atlas…';
+      toast('💬 Chat mode', 'ok');
+      closeArtifact();
+    }
+  } catch (e) { console.warn('toggleAgentMode error:', e); }
+}
+
+const AGENT_PROMPT = `You are building multi-file projects in AGENT MODE. Output every file as its own fenced code block.
+
+=== CRITICAL FORMAT RULES ===
+1. Start EVERY code block with a filename comment on the FIRST LINE:
+   \x3c!-- filename: index.html --\x3e
+   /* filename: css/style.css */
+   // filename: js/app.js
+   # filename: utils/helpers.py
+
+2. Use RELATIVE PATHS with subdirectories where appropriate:
+   \x3c!-- filename: index.html --\x3e
+   /* filename: css/style.css */
+   // filename: js/components/App.jsx
+   /* filename: css/components/Card.css */
+
+3. For websites: ALWAYS include at minimum index.html + css/style.css + js/app.js.
+   Make index.html the entry point that loads all other files.
+
+4. Build COMPLETE, working projects — real layouts, forms, navigation, interactivity.
+   Use CDN (unpkg, cdnjs, esm.sh) for external dependencies.
+
+5. For full-stack apps: build a single-page frontend that simulates API calls
+   (in-memory store, mock fetch responses). Include ALL UI elements.
+
+=== EXAMPLE ===
+User: "build a todo app"
+You:
+\x3c!-- filename: index.html --\x3e
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo App</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <h1>Todo App</h1>
+    <input id="todo-input" placeholder="Add a task…">
+    <button onclick="addTodo()">Add</button>
+    <ul id="todo-list"></ul>
+  </div>
+  <script src="js/app.js"></script>
+</body>
+</html>
+
+/* filename: css/style.css */
+body { font-family: system-ui; max-width: 600px; margin: 0 auto; padding: 20px; }
+/* filename: js/app.js */
+function addTodo() { ... }
+
+=== END EXAMPLE ===
+
+After all code blocks, add a brief 2-3 line summary of what you built.`;
 
 // ── RENDER IMAGE IN CHAT ──────────────────────────────────────────────────
 function renderImageResult(images, prompt, revisedPrompt) {
@@ -3355,57 +3440,66 @@ async function sendMessage() {
   sendBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="2" y="2" width="7" height="7" rx="1" fill="currentColor"/></svg>`;
   S.streaming = true; S.ac = new AbortController();
 
-  // Smart skill auto-detection — runs before building payload
-  await autoDetectSkill(text);
-
-  // Build API payload
-  const apiMsgs = buildApiMsgs();
-  const sp = document.getElementById('sys-input').value.trim();
-  // Detect edit intent — inject stored code blocks into system prompt only when needed
-  // and only when Smart Patch Mode is enabled in settings.
-  const smartPatchEnabled = S.cfg.smartPatch !== false;
-  const editMode = smartPatchEnabled && isEditIntent(text);
-  const sysParts = [];
-  // Global system prompt — always first
-  const globalSP = S.cfg.globalSysPrompt?.trim();
-  if (globalSP) sysParts.push(globalSP);
-  if (sp) sysParts.push(sp);
-  // Inject active skill system prompt
-  const skillPrompt = getSkillSystemPrompt();
-  if (skillPrompt) sysParts.push(skillPrompt);
-  if (editMode) sysParts.push(buildCodeStoreInjection(text));
-  // Inject Don'ts preference
-  const donts = S.cfg.donts?.trim();
-  if (donts) sysParts.push('IMPORTANT — User preferences (Don\'ts):\n' + donts.split('\n').filter(Boolean).map(l => '- ' + l.replace(/^[-•*]\s*/,'')).join('\n'));
-
-  // Output format injection — from button selection or keyword detection
-  const detectedFmt = S.outputFmt || detectOutputFmt(text);
-  if (detectedFmt && OUTPUT_FMT_CONFIG[detectedFmt]) {
-    sysParts.push(buildFmtSystemPrompt(detectedFmt));
-    if (!S.outputFmt) {
-      // Auto-detected — show bar and highlight
-      S.outputFmt = detectedFmt;
-      const bar = document.getElementById('fmt-bar');
-      bar.classList.remove('hidden');
-      document.getElementById('fmt-btn').classList.add('active');
-      renderFmtBar();
+  // ── SHARED REQUEST SETUP (must not throw — wraps streaming-lock zone) ──
+  let apiMsgs, sp, smartPatchEnabled, editMode, sysParts, globalSP, skillPrompt, donts, detectedFmt, codeLikely, patchMode, effectiveMaxTok, requestBody;
+  try {
+    await autoDetectSkill(text);
+    apiMsgs = buildApiMsgs();
+    // Agent mode: inject instruction prefix into the last user message
+    if (S.agentMode && apiMsgs.length > 0) {
+      const last = apiMsgs[apiMsgs.length - 1];
+      if (last && last.role === 'user' && typeof last.content === 'string') {
+        last.content = `[AGENT MODE] Build the following project. Output each file in its own fenced code block with a "filename:" comment showing the file path on line 1:\n\n${last.content}`;
+      }
     }
+    sp = document.getElementById('sys-input')?.value.trim() ?? '';
+    smartPatchEnabled = S.cfg.smartPatch !== false;
+    editMode = smartPatchEnabled && isEditIntent(text);
+    sysParts = [];
+    globalSP = S.cfg.globalSysPrompt?.trim();
+    if (globalSP) sysParts.push(globalSP);
+    if (sp) sysParts.push(sp);
+    skillPrompt = getSkillSystemPrompt();
+    if (skillPrompt) sysParts.push(skillPrompt);
+    if (editMode) sysParts.push(buildCodeStoreInjection(text));
+    donts = S.cfg.donts?.trim();
+    if (donts) sysParts.push('IMPORTANT — User preferences (Don\'ts):\n' + donts.split('\n').filter(Boolean).map(l => '- ' + l.replace(/^[-•*]\s*/,'')).join('\n'));
+    detectedFmt = S.outputFmt || detectOutputFmt(text);
+    if (S.agentMode && AGENT_PROMPT) sysParts.push(AGENT_PROMPT);
+    if (detectedFmt && OUTPUT_FMT_CONFIG[detectedFmt]) {
+      sysParts.push(buildFmtSystemPrompt(detectedFmt));
+      if (!S.outputFmt) {
+        S.outputFmt = detectedFmt;
+        const bar = document.getElementById('fmt-bar');
+        if (bar) bar.classList.remove('hidden');
+        const fb = document.getElementById('fmt-btn');
+        if (fb) fb.classList.add('active');
+        renderFmtBar();
+      }
+    }
+    codeLikely = !editMode && /\b(write|create|build|generate|implement|program|make me a|make a)\b.*\b(script|function|class|component|app|game|website|webpage|api|bot|tool|html|css|javascript|python|java|rust|go|php|ruby|bash|sql)\b/i;
+    if (codeLikely?.test?.(text)) {
+      sysParts.push('Start every code block\'s first line with a filename comment, e.g. `# filename: my_script.py` or `// filename: utils.js`.');
+    }
+    if (sysParts.length) apiMsgs.unshift({ role: 'system', content: sysParts.join('\n\n') });
+    if (editMode) dbgLog('INFO', `Edit intent detected — injecting ${S.codeStore.size} block(s) into system prompt`);
+    patchMode = editMode;
+  } catch (e) {
+    S.streaming = false;
+    if (thinkRow._thinkTimer) clearInterval(thinkRow._thinkTimer);
+    if (thinkRow.parentNode) thinkRow.remove();
+    sendBtn.classList.remove('stop');
+    sendBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5h10M6.5 1.5l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    toast('Failed to prepare request: ' + (e.message || e), 'er');
+    S.ac?.abort();
+    return;
   }
-
-  // Only suggest filename comment for fresh code generation requests (not edits to existing code)
-  const codeLikely = !editMode && /\b(write|create|build|generate|implement|program|make me a|make a)\b.*\b(script|function|class|component|app|game|website|webpage|api|bot|tool|html|css|javascript|python|java|rust|go|php|ruby|bash|sql)\b/i;
-  if (codeLikely && codeLikely.test && codeLikely.test(text)) {
-    sysParts.push('Start every code block\'s first line with a filename comment, e.g. `# filename: my_script.py` or `// filename: utils.js`.');
-  }
-  if (sysParts.length) apiMsgs.unshift({ role: 'system', content: sysParts.join('\n\n') });
-  if (editMode) dbgLog('INFO', `Edit intent detected — injecting ${S.codeStore.size} block(s) into system prompt`);
 
   // Always use patch mode when in edit mode — prevents model from rewriting whole file
-  const patchMode = editMode;
   // Boost max_tokens for code-heavy requests to reduce mid-generation cutoffs
   const isCodeRequest = !patchMode && /\b(write|create|build|generate|implement|make)\b/i.test(text) && /\b(html|css|js|javascript|python|script|component|app|game|function|class|page|website|code)\b/i.test(text);
-  const effectiveMaxTok = patchMode ? 4096 : isCodeRequest ? Math.min(S.cfg.maxTok * 2, 32000) : S.cfg.maxTok;
-  const requestBody = {
+  effectiveMaxTok = patchMode ? 4096 : isCodeRequest ? Math.min(S.cfg.maxTok * 2, 32000) : S.cfg.maxTok;
+  requestBody = {
     model: (S.model.apiId || S.model.id).replace(/:(free|nitro|floor|beta)$/, ''),
     messages: apiMsgs,
     stream: true,
@@ -3838,6 +3932,7 @@ async function sendMessage() {
       sendBtn.classList.remove('stop');
       sendBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5h10M6.5 1.5l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
       await handleContinuation(aiIdx, full, sEl, mEl, aiRow);
+      _agentProcessResponse(aiRow);
     } catch(e) {
       if (thinkRow._thinkTimer) clearInterval(thinkRow._thinkTimer);
       if (thinkRow.parentNode) thinkRow.remove();
@@ -4113,6 +4208,7 @@ async function sendMessage() {
     sendBtn.classList.remove('stop');
     sendBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5h10M6.5 1.5l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     await handleContinuation(aiIdx, full, sEl, mEl, aiRow);
+    _agentProcessResponse(aiRow);
 
   } catch (e) {
     // If web search plugin caused a network-level failure, retry without it
@@ -6056,6 +6152,7 @@ async function sendFromHistory() {
     persist();
     updateCtxBar();
     renderMessages();
+    _agentProcessResponse();
   } catch(e) {
     if (thinkRow.parentNode) thinkRow.remove();
     if (e.name !== 'AbortError') {
@@ -6125,6 +6222,360 @@ function buildApiMsgs() {
     }
     return { role: 'user', content: m.content };
   });
+}
+
+// ── AGENT MODE — IN-MEMORY FILE SYSTEM ────────────────────────────────
+const _agentVfs = {
+  _files: new Map(),
+  _projectName: 'Project',
+  _activePath: null,
+
+  write(path, content, lang) {
+    const clean = path.replace(/^(\.\/|\/)+/, '');
+    this._files.set(clean, { path: clean, content, lang: lang || 'txt' });
+    this._updateBar();
+    return clean;
+  },
+
+  read(path) {
+    const e = this._files.get(path);
+    return e ? e.content : null;
+  },
+
+  list(prefix) {
+    const out = [];
+    this._files.forEach((_, k) => {
+      if (!prefix || k.startsWith(prefix)) out.push(k);
+    });
+    return out.sort();
+  },
+
+  getTree() {
+    const root = [];
+    const map = {};
+    this._files.forEach((v, k) => {
+      const parts = k.split('/');
+      let cursor = map;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const isFile = i === parts.length - 1;
+        if (isFile) {
+          if (!cursor._files) cursor._files = [];
+          cursor._files.push({ name: part, path: k, type: 'file' });
+        } else {
+          if (!cursor[part]) cursor[part] = { _files: [] };
+          cursor = cursor[part];
+        }
+      }
+    });
+    function build(obj, name) {
+      const folders = [];
+      const files = [];
+      for (const key of Object.keys(obj)) {
+        if (key === '_files') continue;
+        folders.push(build(obj[key], key));
+      }
+      if (obj._files) files.push(...obj._files);
+      if (!name) return [...folders, ...files];
+      return { name, type: 'folder', children: [...folders, ...files] };
+    }
+    const tree = build(map, null);
+    return { name: this._projectName, type: 'folder', children: tree };
+  },
+
+  getAllFiles() {
+    return Array.from(this._files.values());
+  },
+
+  clear() {
+    this._files.clear();
+    this._activePath = null;
+    this._updateBar();
+  },
+
+  _updateBar() {
+    const sub = document.getElementById('agent-bar-sub');
+    if (sub) sub.textContent = this._files.size + ' file' + (this._files.size !== 1 ? 's' : '');
+    const dlBtn = document.getElementById('art-dl-project-btn');
+    if (dlBtn) dlBtn.style.display = this._files.size ? '' : 'none';
+  },
+};
+
+function _agentExtractFilename(raw) {
+  const lines = raw.split('\n');
+  const scan = lines.slice(0, 8);
+  for (const line of scan) {
+    // filename: path/to/file.ext
+    let m = line.match(/filename[:\s]+(.+\.\w+)/i);
+    if (m) return m[1].trim();
+    // <!-- path/to/file.ext -->
+    m = line.match(/<!--\s*(.+\.\w+)\s*-->/);
+    if (m) return m[1].trim();
+    // /* path/to/file.ext */
+    m = line.match(/\/\*\s*(.+\.\w+)\s*\*\//);
+    if (m) return m[1].trim();
+    // // path/to/file.ext
+    m = line.match(/\/\/\s*(.+\.\w+)/);
+    if (m) return m[1].trim();
+    // # path/to/file.ext
+    m = line.match(/^#\s*(.+\.\w+)/);
+    if (m) return m[1].trim();
+  }
+  // Fallback: check for <title> tag (HTML files without explicit filename)
+  const titleMatch = raw.match(/<title>([^<]+)<\/title>/i);
+  if (titleMatch) {
+    const slug = titleMatch[1].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'page';
+    return slug + '.html';
+  }
+  return null;
+}
+
+// Attempt to extract files directly from text content (fallback when model
+// doesn't use fenced code blocks). Returns number of files extracted, or 0.
+function _extractFilesFromText(text) {
+  const lines = text.split('\n');
+  let currentPath = null;
+  let currentLines = [];
+  let count = 0;
+  const scan = lines.slice(0, 12);
+
+  for (const line of lines) {
+    let m = line.match(/filename[:\s]+(.+\.\w+)/i);
+    if (!m) m = line.match(/<!--\s*(.+\.\w+)\s*-->/);
+    if (!m) m = line.match(/\/\*\s*(.+\.\w+)\s*\*\//);
+    if (!m) m = line.match(/\/\/\s*(.+\.\w+)/);
+    if (!m) m = line.match(/^#\s*(.+\.\w+)/);
+    if (m) {
+      if (currentPath && currentLines.length) {
+        const content = currentLines.join('\n').trim();
+        if (content) { _agentVfs.write(currentPath, content, currentPath.split('.').pop()); count++; }
+      }
+      currentPath = m[1].trim();
+      currentLines = [];
+    } else if (currentPath) {
+      currentLines.push(line);
+    }
+  }
+  if (currentPath && currentLines.length) {
+    const content = currentLines.join('\n').trim();
+    if (content) { _agentVfs.write(currentPath, content, currentPath.split('.').pop()); count++; }
+  }
+  return count;
+}
+
+function _agentProcessResponse(msgEl) {
+  if (!S.agentMode) return;
+  const codeBlks = (msgEl || document).querySelectorAll('.code-blk');
+
+  // Set project name from the last user message
+  const lastUserMsg = S.msgs.filter(m => m.role === 'user').pop();
+  _agentVfs._projectName = lastUserMsg?.content?.slice(0, 50) || 'Project';
+
+  let anyFile = false;
+  const langExtMap = { html: 'html', css: 'css', javascript: 'js', js: 'js', jsx: 'jsx', ts: 'ts', tsx: 'tsx', python: 'py', py: 'py', json: 'json', svg: 'svg', xml: 'xml', markdown: 'md', md: 'md', yaml: 'yml', yml: 'yml', bash: 'sh', sh: 'sh', sql: 'sql', go: 'go', rust: 'rs', ruby: 'rb', php: 'php', java: 'java', c: 'c', cpp: 'cpp', cs: 'cs', swift: 'swift', kotlin: 'kt', scala: 'scala', r: 'r', tex: 'tex', plain: 'txt', text: 'txt', txt: 'txt' };
+  const untitledCounts = {};
+
+  codeBlks.forEach(blk => {
+    const raw = blk.dataset.raw ? b64ToUtf8(blk.dataset.raw) : '';
+    if (!raw) return;
+    const lang = (blk.dataset.lang || '').toLowerCase();
+    const fileName = _agentExtractFilename(raw);
+    const ext = langExtMap[lang] || lang || 'txt';
+    let path;
+    if (fileName) {
+      path = fileName;
+    } else {
+      untitledCounts[ext] = (untitledCounts[ext] || 0) + 1;
+      path = untitledCounts[ext] > 1 ? 'untitled-' + untitledCounts[ext] + '.' + ext : 'untitled.' + ext;
+    }
+    _agentVfs.write(path, raw, lang);
+    anyFile = true;
+  });
+
+  // Fallback: if no code-block elements found and we have a specific msgEl,
+  // try extracting files directly from its text content.
+  if (!anyFile && msgEl) {
+    const mdBody = msgEl.querySelector('.md-body');
+    const msgText = mdBody ? mdBody.textContent || '' : '';
+    const fallbackCount = _extractFilesFromText(msgText);
+    if (fallbackCount > 0) {
+      anyFile = true;
+      toast('📁 Extracted ' + fallbackCount + ' file' + (fallbackCount !== 1 ? 's' : '') + ' (text)', 'ok');
+    }
+  }
+
+  if (anyFile) {
+    const count = _agentVfs._files.size;
+    if (!msgEl) toast('📁 Extracted ' + count + ' file' + (count !== 1 ? 's' : ''), 'ok');
+    const files = _agentVfs.list();
+    const entry = files.find(f => f.endsWith('index.html')) || files[0];
+    if (entry) _agentPreviewFile(entry);
+    _renderAgentTree();
+  }
+}
+
+function _agentPreviewFile(path) {
+  const content = _agentVfs.read(path);
+  if (!content) return;
+  _agentVfs._activePath = path;
+
+  // Find or create artifact for this path
+  let artIdx = _artifacts.findIndex(a => a.id === 'af:' + path);
+  if (artIdx < 0) {
+    const lang = path.split('.').pop() || 'txt';
+    const title = lang.toUpperCase() + ' — ' + path;
+    _artifacts.push({ id: 'af:' + path, lang, code: content, title });
+    artIdx = _artifacts.length - 1;
+  } else {
+    _artifacts[artIdx].code = content;
+  }
+  activateArtifact(artIdx);
+}
+
+function _renderAgentTree() {
+  const tree = document.getElementById('artifact-tree');
+  if (!tree) return;
+  const treeData = _agentVfs.getTree();
+  const hasFiles = treeData.children && treeData.children.length > 0;
+
+  if (!S.agentMode || !hasFiles) {
+    tree.classList.remove('open');
+    tree.innerHTML = '';
+    document.getElementById('artifact-tabs').style.display = '';
+    document.getElementById('art-dl-project-btn').style.display = 'none';
+    return;
+  }
+  tree.classList.add('open');
+  document.getElementById('artifact-tabs').style.display = 'none';
+
+  const activePath = _agentVfs._activePath;
+
+  function renderNode(node, depth) {
+    if (node.type === 'file') {
+      const active = node.path === activePath ? ' active' : '';
+      const ext = (node.name.split('.').pop() || '').toLowerCase();
+      const icon = ext === 'html' ? '🌐' : ext === 'css' ? '🎨' : ['js','jsx','ts','tsx'].includes(ext) ? '⚡' : ext === 'json' ? '📋' : ext === 'svg' ? '🖼' : ext === 'md' ? '📝' : '📄';
+      return `<div class="art-tree-item${active}" data-path="${esc(node.path)}" onclick="_agentPreviewFile('${esc(node.path)}')">${icon} ${esc(node.name)}</div>`;
+    }
+    const isOpen = true;
+    const expando = isOpen ? '▾' : '▸';
+    let html = `<div class="art-tree-folder-hdr" onclick="void(0)">`;
+    html += `<span class="art-tree-expando open">${expando}</span><span class="art-tree-folder-icon">📁</span><span class="art-tree-folder-name">${esc(node.name)}</span></div>`;
+    html += `<div class="art-tree-folder-body open">`;
+    if (node.children) node.children.forEach(c => html += renderNode(c, depth + 1));
+    html += `</div>`;
+    return html;
+  }
+
+  let html = `<div class="art-tree-hdr">📁 ${esc(treeData.name)}</div><div class="art-tree-body">`;
+  if (treeData.children) treeData.children.forEach(c => html += renderNode(c, 0));
+  html += '</div>';
+  tree.innerHTML = html;
+}
+
+// ── AGENT MODE — ZIP DOWNLOAD ────────────────────────────────────────────
+function _agentDownloadZip() {
+  const files = _agentVfs.getAllFiles();
+  if (!files.length) { toast('No files to download', 'er'); return; }
+
+  // Build ZIP in memory using Compression Streams if available, else store method
+  // ZIP local file header + data descriptor
+  const localHeader = (name, size, crc) => {
+    const utfName = new TextEncoder().encode(name);
+    const buf = new ArrayBuffer(30 + utfName.length);
+    const v = new DataView(buf);
+    v.setUint32(0, 0x04034b50, true); // signature
+    v.setUint16(4, 20, true); // version needed
+    v.setUint16(6, 0, true); // flags
+    v.setUint16(8, 0, true); // compression (store)
+    v.setUint16(10, 0, true); // mod time
+    v.setUint16(12, 0, true); // mod date
+    v.setUint32(14, crc || 0, true);
+    v.setUint32(18, size || 0, true);
+    v.setUint32(22, size || 0, true);
+    v.setUint16(26, utfName.length, true);
+    v.setUint16(28, 0, true); // extra field length
+    new Uint8Array(buf, 30).set(utfName);
+    return buf;
+  };
+  const centralDir = (name, size, crc, offset) => {
+    const utfName = new TextEncoder().encode(name);
+    const buf = new ArrayBuffer(46 + utfName.length);
+    const v = new DataView(buf);
+    v.setUint32(0, 0x02014b50, true); // signature
+    v.setUint16(4, 20, true);
+    v.setUint16(6, 20, true);
+    v.setUint16(8, 0, true);
+    v.setUint16(10, 0, true);
+    v.setUint16(12, 0, true);
+    v.setUint16(14, 0, true);
+    v.setUint32(16, crc || 0, true);
+    v.setUint32(20, size || 0, true);
+    v.setUint32(24, size || 0, true);
+    v.setUint16(28, utfName.length, true);
+    v.setUint16(30, 0, true);
+    v.setUint16(32, 0, true);
+    v.setUint16(34, 0, true);
+    v.setUint16(36, 0, true);
+    v.setUint32(38, 0, true);
+    v.setUint32(42, offset || 0, true);
+    new Uint8Array(buf, 46).set(utfName);
+    return buf;
+  };
+
+  const encoder = new TextEncoder();
+  let offset = 0;
+  const chunks = [];
+  const dirEntries = [];
+
+  files.forEach(f => {
+    const data = encoder.encode(f.content);
+    const size = data.byteLength;
+    const crc = crc32(data);
+    const lh = localHeader(f.path, size, crc);
+    chunks.push(lh, data.buffer);
+    dirEntries.push({ name: f.path, size, crc, offset });
+    offset += lh.byteLength + size;
+  });
+
+  // Central directory
+  const dirOffset = offset;
+  dirEntries.forEach(e => {
+    const cd = centralDir(e.name, e.size, e.crc, e.offset);
+    chunks.push(cd);
+    offset += cd.byteLength;
+  });
+
+  // End of central directory
+  const eocdSize = 22;
+  const eocd = new ArrayBuffer(eocdSize);
+  const ev = new DataView(eocd);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, dirEntries.length, true);
+  ev.setUint16(10, dirEntries.length, true);
+  ev.setUint32(12, offset - dirOffset, true);
+  ev.setUint32(16, dirOffset, true);
+  ev.setUint16(20, 0, true);
+  chunks.push(eocd);
+
+  const blob = new Blob(chunks, { type: 'application/zip' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (_agentVfs._projectName || 'project') + '.zip';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('⬇ Project downloaded as ZIP', 'ok');
+}
+
+function crc32(data) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 // ── ARTIFACT PANEL ────────────────────────────────────────────────────────

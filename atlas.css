@@ -95,6 +95,22 @@ body:not(.sidebar-pinned) #sidebar.coll{width:0;min-width:0}
 }
 .nb:hover{background:var(--agls)}
 
+#agent-bar{
+  margin:0 0 6px;padding:9px 12px;border-radius:0 0 var(--rs) var(--rs);
+  cursor:pointer;transition:all .15s;user-select:none;
+  background:var(--surf);border:1px solid var(--bdr);border-top:none;
+  position:relative;z-index:2;
+}
+#agent-bar:hover{background:var(--hov);border-color:var(--acc2)}
+#agent-bar.on{background:var(--agl);border-color:var(--acc);border-bottom-width:2px}
+#agent-bar .agent-bar-row{display:flex;align-items:center;gap:6px}
+#agent-bar .agent-bar-icon{font-size:14px;flex-shrink:0}
+#agent-bar .agent-bar-label{flex:1;font-size:12px;font-weight:600;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#agent-bar.on .agent-bar-label{color:var(--tx1)}
+#agent-bar .agent-bar-toggle{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--elev);color:var(--tx3)}
+#agent-bar.on .agent-bar-toggle{background:var(--acc);color:#fff;box-shadow:0 0 8px var(--agls)}
+#agent-bar .agent-bar-sub{font-size:10px;color:var(--tx3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#agent-bar.on .agent-bar-sub{color:var(--acc)}
 .sb-lbl{padding:clamp(10px,1.5vh,16px) clamp(10px,2vw,18px) 4px;font-size:clamp(9px,1vw,11px);font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--tx3);flex-shrink:0}
 #conv-search-wrap{padding:4px 8px 2px;flex-shrink:0}
 #conv-search{width:100%;padding:5px 9px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:clamp(11px,1.4vw,12px);outline:none;font-family:'DM Sans',sans-serif;transition:border-color .15s}
@@ -612,6 +628,48 @@ body:not(.sidebar-pinned) #sidebar.coll{width:0;min-width:0}
 .art-btn:hover{background:var(--act);color:var(--tx1)}
 .art-btn.close{color:var(--red)}
 .art-btn.close:hover{background:var(--redd);border-color:rgba(255,95,109,.3)}
+.art-btn.run{color:var(--grn);border-color:var(--grnd)}
+.art-btn.run:hover{background:var(--grnd);color:var(--grn)}
+.art-btn.run.running{color:var(--red);border-color:var(--redd);background:var(--redd)}
+.art-btn.run.running:hover{background:var(--redd)}
+#artifact-body{
+  display:flex;flex:1;overflow:hidden;min-height:0;
+}
+#artifact-content{
+  display:flex;flex-direction:column;flex:1;min-width:0;
+}
+#artifact-tree{
+  display:none;width:200px;flex-shrink:0;overflow-y:auto;
+  border-right:1px solid var(--bdr);background:var(--surf);
+  font-size:12px;
+}
+#artifact-tree.open{display:block}
+#artifact-tree::-webkit-scrollbar{width:3px}
+#artifact-tree::-webkit-scrollbar-thumb{background:var(--bdr)}
+.art-tree-hdr{
+  padding:8px 10px;font-size:11px;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--tx3);border-bottom:1px solid var(--bdr);
+  font-family:'DM Sans',sans-serif;
+}
+.art-tree-body{padding:4px 0}
+.art-tree-folder-hdr{
+  display:flex;align-items:center;gap:4px;padding:4px 10px;cursor:pointer;
+  color:var(--tx2);transition:background .1s;font-size:12px;
+}
+.art-tree-folder-hdr:hover{background:var(--hov);color:var(--tx1)}
+.art-tree-folder-hdr .art-tree-expando{font-size:8px;width:12px;text-align:center;flex-shrink:0;transition:transform .15s}
+.art-tree-folder-hdr .art-tree-expando.open{transform:rotate(90deg)}
+.art-tree-folder-hdr .art-tree-folder-icon{font-size:13px;flex-shrink:0}
+.art-tree-folder-hdr .art-tree-folder-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.art-tree-folder-body{padding-left:14px;display:none}
+.art-tree-folder-body.open{display:block}
+.art-tree-item{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 10px;padding-left:14px;cursor:pointer;color:var(--tx2);
+  transition:background .1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.art-tree-item:hover{background:var(--hov);color:var(--tx1)}
+.art-tree-item.active{background:var(--act);color:var(--acc)}
 #artifact-tabs{
   display:flex;gap:0;border-bottom:1px solid var(--bdr);background:var(--surf);
   overflow-x:auto;flex-shrink:0;

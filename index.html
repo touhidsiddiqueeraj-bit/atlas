@@ -49,6 +49,14 @@
 <div id="sov" data-click="closeSb()"></div>
 
   <div id="sidebar">
+    <div id="agent-bar" data-click="toggleAgentMode()">
+      <div class="agent-bar-row">
+        <span class="agent-bar-icon">🛠</span>
+        <span class="agent-bar-label">Agent Workspace</span>
+        <span class="agent-bar-toggle" id="agent-bar-toggle">OFF</span>
+      </div>
+      <div class="agent-bar-sub" id="agent-bar-sub">Build multi-file projects</div>
+    </div>
     <div class="sb-hd">
       <div class="logo">Atlas</div>
       <button class="nb" data-click="newChat()">
@@ -227,10 +235,17 @@
       <button class="art-btn" id="art-view-toggle" data-click="toggleArtSource()">⟨/⟩ Source</button>
       <button class="art-btn" id="art-edit-toggle" data-click="toggleArtEdit()">✏ Edit</button>
       <button class="art-btn" data-click="openArtNewTab()">↗ New tab</button>
+      <button class="art-btn" id="art-dl-project-btn" data-click="_agentDownloadZip()" title="Download project as ZIP" style="display:none">⬇ Project</button>
       <button class="art-btn" data-click="dlArtifact()">⬇ Download</button>
       <button class="art-btn" id="art-drive-btn" data-click="uploadArtToDrive()" style="display:none" title="Upload to Google Drive">☁ Drive</button>
       <button class="art-btn close" data-click="closeArtifact()">✕ Close</button>
     </div>
+    <div id="artifact-body">
+      <div id="artifact-tree" style="display:none">
+        <div class="art-tree-hdr">📁 Project</div>
+        <div class="art-tree-body"></div>
+      </div>
+      <div id="artifact-content">
     <div id="artifact-tabs"></div>
     <div id="artifact-frame-wrap">
       <iframe id="artifact-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe>
@@ -498,6 +513,7 @@
           <button class="ve-bt-btn" data-click="veDeleteBlock()" title="Delete block" style="color:#c00">✕</button>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </div>
