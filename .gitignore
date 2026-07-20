@@ -1,0 +1,83 @@
+# ── Atlas .gitignore ────────────────────────────────────────────────────────
+# Atlas is a static, no-build-step project. The only things that should be
+# ignored are editor/OS cruft and any local experiments a developer might
+# drop into the repo while testing.
+
+# ── OS / Editor cruft ───────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# LibreOffice / Office lock files
+.~lock.*
+
+# VS Code
+.vscode/
+*.code-workspace
+*.code-profile
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ── Local testing artifacts ─────────────────────────────────────────────────
+# Developers may drop a local server script or test files here — don't commit them
+/local-*.js
+/local-*.html
+/test-*.js
+/scratch/
+
+# Python (for `python3 -m http.server` users who might create venvs)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Node (for `npx http-server` users)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Secrets — never commit API keys ─────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets.json
+
+# ── Build output (Atlas has no build step, but just in case) ────────────────
+/dist/
+/build/
+/.cache/
+*.zip
+!screenshots/*.zip
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+*.log
+logs/
