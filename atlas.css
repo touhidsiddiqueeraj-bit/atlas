@@ -1887,3 +1887,108 @@ body.light .agent-ft-file:hover{ background:#eeeef5; color:#5b4de0; }
 body.light .agent-dl-all{ background:rgba(124,106,255,.10); border-color:#dcdcea; color:#5b4de0; }
 body.light .agent-dl-all:hover{ background:rgba(124,106,255,.18); }
 
+
+/* ════════════════════════════════════════════════════════════════════════
+   ARTIFACT DOCUMENT SYSTEM (modules/artifact.js)
+   Claude-style artifact cards in chat, version menu, export menu,
+   and the "Edit with Claude" selection modal.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Chat card ── */
+.art-card{border:1px solid var(--bdr);border-radius:12px;background:var(--surf);
+  margin:12px 0;max-width:560px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.art-card-main{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;transition:background .12s}
+.art-card-main:hover{background:var(--hov)}
+.art-card-emoji{width:38px;height:38px;border-radius:9px;flex-shrink:0;font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--acc2);border:1px solid rgba(124,106,255,.25)}
+.art-card-info{min-width:0;flex:1}
+.art-card-title{font-size:13px;font-weight:600;color:var(--tx1);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.art-card-meta{font-size:11px;color:var(--tx3);margin-top:3px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.art-card-open{font-size:11px;color:var(--acc);font-weight:600;white-space:nowrap;flex-shrink:0}
+.art-card.streaming .art-card-meta{color:var(--acc)}
+.art-card.streaming .art-card-emoji{animation:atlasPulse 1.4s ease-in-out infinite}
+.art-card-toggle{border-top:1px solid var(--bdr);text-align:center;font-size:10.5px;
+  color:var(--tx3);padding:6px 4px;cursor:pointer;user-select:none;letter-spacing:.02em}
+.art-card-toggle:hover{color:var(--tx1);background:var(--hov)}
+
+/* ── Inline preview body (expandable in chat) ── */
+.art-card-body{max-height:340px;overflow:auto;background:var(--base);padding:16px 18px;
+  font-size:13px;line-height:1.75;color:var(--tx1);border-top:1px solid var(--bdr)}
+.art-card-body h1,.art-card-body h2,.art-card-body h3,.art-card-body h4{color:var(--tx1);
+  margin:16px 0 6px;line-height:1.35;font-weight:700}
+.art-card-body h1{font-size:18px}.art-card-body h2{font-size:16px;border-bottom:1px solid var(--bdr);padding-bottom:4px}
+.art-card-body h3{font-size:14px}.art-card-body h4{font-size:13px;color:var(--tx2)}
+.art-card-body p{margin:7px 0}
+.art-card-body ul,.art-card-body ol{margin:7px 0;padding-left:22px}
+.art-card-body li{margin:3px 0}
+.art-card-body a{color:var(--acc);text-decoration:none}
+.art-card-body blockquote{margin:10px 0;padding:4px 12px;border-left:3px solid var(--acc);
+  color:var(--tx2);background:var(--elev);border-radius:0 6px 6px 0}
+.art-card-body code{background:var(--elev);border:1px solid var(--bdr);padding:1px 5px;
+  border-radius:4px;font-family:'DM Mono',monospace;font-size:.88em}
+.art-card-body .md-pre{margin:10px 0;padding:10px 12px;background:var(--base);
+  border:1px solid var(--bdr);border-radius:8px;overflow-x:auto;white-space:pre;
+  font:11.5px/1.6 'DM Mono',monospace;color:var(--tx2)}
+.art-card-body table{border-collapse:collapse;margin:10px 0;font-size:.92em}
+.art-card-body th,.art-card-body td{border:1px solid var(--bdr);padding:5px 9px;text-align:left}
+.art-card-body th{background:var(--elev)}
+.art-card-body hr{border:none;border-top:1px solid var(--bdr);margin:14px 0}
+.art-card-body .md-empty{color:var(--tx3);font-style:italic}
+
+/* ── Panel header doc buttons ── */
+#artifact-hdr .art-doc-btn{font-size:11px;padding:3px 8px;flex-shrink:0}
+
+/* ── Popup menus (version history / export) ── */
+.art-pop-menu{position:absolute;top:52px;right:14px;z-index:300;min-width:230px;max-width:300px;
+  max-height:46vh;overflow-y:auto;background:var(--elev);border:1px solid var(--bdr);
+  border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.42);padding:6px;
+  font-family:'DM Sans',system-ui,sans-serif}
+.apm-hdr{font-size:10.5px;color:var(--tx3);text-transform:uppercase;letter-spacing:.09em;
+  padding:7px 10px 5px;border-bottom:1px solid var(--bdr);margin-bottom:4px}
+.apm-row{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;
+  font-size:12.5px;color:var(--tx1);cursor:pointer}
+.apm-row:hover{background:var(--hov)}
+.apm-row.cur{background:var(--acc2)}
+.apm-v{font-weight:700;color:var(--acc);min-width:26px}
+.apm-t{color:var(--tx2);flex:1}
+.apm-o{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);
+  border:1px solid var(--bdr);border-radius:4px;padding:1px 5px}
+.apm-cur{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--grn)}
+.apm-sep{height:1px;background:var(--bdr);margin:5px 4px}
+
+/* ── "Edit with Claude" modal ── */
+#art-edit-modal{position:fixed;inset:0;z-index:1000;background:rgba(5,5,10,.62);
+  backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:18px}
+#art-edit-card{width:min(520px,94vw);background:var(--surf);border:1px solid var(--bdr);
+  border-radius:14px;padding:20px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+#art-edit-head{font-size:15px;font-weight:700;color:var(--tx1);margin-bottom:6px}
+#art-edit-doc{font-size:12px;color:var(--acc);margin-bottom:10px}
+#art-edit-quote{font-size:12px;color:var(--tx2);background:var(--elev);border:1px solid var(--bdr);
+  border-left:3px solid var(--acc);border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:12px;
+  max-height:110px;overflow:auto;font-style:italic;white-space:pre-wrap}
+#art-edit-input{width:100%;box-sizing:border-box;min-height:84px;resize:vertical;
+  background:var(--base);border:1px solid var(--bdr);border-radius:9px;padding:11px 13px;
+  color:var(--tx1);font-family:'DM Sans',system-ui,sans-serif;font-size:13px;line-height:1.6;outline:none}
+#art-edit-input:focus{border-color:var(--acc)}
+#art-edit-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:14px}
+#art-edit-cancel{padding:7px 14px;border-radius:8px;border:1px solid var(--bdr);
+  background:transparent;color:var(--tx2);font-size:12.5px;cursor:pointer}
+#art-edit-cancel:hover{background:var(--hov);color:var(--tx1)}
+#art-edit-send{padding:7px 16px;border-radius:8px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#7c6aff,#9d7cff);color:#fff;font-size:12.5px;font-weight:600}
+#art-edit-send:hover{filter:brightness(1.12)}
+
+/* ── Light theme touches ── */
+body.light .art-card{box-shadow:0 1px 3px rgba(30,30,60,.10)}
+body.light .art-pop-menu{box-shadow:0 12px 34px rgba(30,30,60,.22)}
+body.light #art-edit-modal{background:rgba(240,240,250,.6)}
+body.light #art-edit-card{background:#fff}
+
+@media (max-width:600px){
+  .art-card{max-width:100%}
+  .art-card-body{max-height:260px}
+  .art-pop-menu{right:8px;left:8px;min-width:0}
+}

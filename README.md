@@ -100,6 +100,39 @@ Code blocks in AI responses can be opened in a side panel with three viewing mod
 
 ---
 
+### Artifact Document System (Claude-style)
+
+Atlas implements a Claude.ai-style artifact pipeline for substantial, self-contained content — documents, HTML pages, SVG graphics, Mermaid diagrams, and code files. Ask for "a product brief", "a one-page report", or "build a tip calculator" and the response opens as a **live artifact** in the side panel instead of a wall of text in the chat.
+
+**How it works:**
+
+1. An always-on system-prompt protocol (adapted from Claude's `artifacts_info`) instructs the model to wrap substantial content in tags:
+   ```
+   <artifact identifier="product-brief" type="text/markdown" title="Product Brief">
+   …complete content…
+   </artifact>
+   ```
+   Supported types: `text/markdown`, `text/html`, `image/svg+xml`, `application/vnd.ant.mermaid`, `application/vnd.ant.code` (with a `language="python"` attribute).
+2. An incremental stream parser detects the tags mid-stream — the artifact panel opens automatically and the content **renders live** as tokens arrive (no waiting for the full response).
+3. The chat shows a compact **artifact card** (title, type, version, live char count) with a "Preview in chat" expander — the full content lives in the panel, not the chat.
+4. When the model updates the same `identifier`, the update becomes a **new version** (v1 → v2 → v3…) — switch or restore any version from the **vN ▾ dropdown** in the panel header.
+
+**Editing — three ways (all create a new version):**
+- **Chat**: *"add a conclusion to the brief"* — the current artifact content is injected into the system prompt and the model re-emits the full updated artifact
+- **Selection**: highlight any passage in the document panel → a floating **"✨ Edit with Claude"** button appears → describe the change → the model rewrites just that part of the document
+- **Panel**: ✏ Edit opens the raw markdown; Apply saves it as a new version
+
+**Exports (⬇ Export menu):**
+- Documents: Markdown (.md), standalone styled HTML, **PDF** and **DOCX** (via the existing jsPDF / docx.js generators), or ✏️ **Open in Word editor** — the markdown is converted into the office-level visual editor's document model for rich-text editing
+- Mermaid: source (.mmd) or rendered SVG
+- SVG / HTML: native formats
+
+**Persistence** — artifacts and all versions are saved into the conversation (IndexedDB) and restored when you reopen the chat: cards re-render from `[[ARTIFACT:id]]` tokens in the message text, and the store always wins over re-parsed message content. Partial documents are rescued on abort (Stop button) and on reload.
+
+**Coexistence** — the system runs alongside the existing Output Format feature: explicit file-format requests ("make a **PDF** report", "create a **PowerPoint** deck") still route to the JSON-schema generators + visual editors, while open-ended document requests flow to the artifact system. Agent Mode keeps its own multi-file protocol. Implemented in `modules/artifact.js` (~1,100 lines, zero dependencies) with small hooks in `atlas.js` (system prompt assembly, three stream loops, `renderMarkdown`, persistence).
+
+---
+
 ### Agent Mode — Multi-File Website Builder
 
 Toggle Agent Mode (hexagon icon in the input bar, or the "Agent Mode" bar at the top of the sidebar) and ask Atlas to build a multi-file project. Atlas extracts every file from the model's response into an in-memory file tree, with full folder structure preserved.

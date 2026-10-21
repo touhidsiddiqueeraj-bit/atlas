@@ -1076,6 +1076,21 @@ function buildFmtSystemPrompt(fmt) {
   return OUTPUT_FMT_CONFIG[fmt]?.systemPrompt || '';
 }
 
+// ── ARTIFACT DOCUMENT SYSTEM variant ─────────────────────────────────────────
+// Generic document words ("report", "essay", "brief"…) no longer force the
+// legacy JSON pipeline — open-ended document requests flow to the artifact
+// document system instead. Only explicit file-format asks (PDF / Word /
+// PowerPoint / CSS) still route to the generators, so both systems coexist.
+function detectOutputFmtStrict(text) {
+  const t = text.toLowerCase();
+  const mk = /\b(make|create|generate|write|build|produce|export|convert|save|download)\b/;
+  if (/\b(pdf|portable document|\.pdf)\b/.test(t) && mk.test(t)) return 'pdf';
+  if (/\b(word|docx|word doc|word document|\.docx)\b/.test(t) && mk.test(t)) return 'docx';
+  if (/\b(powerpoint|pptx|presentation|slide deck|slides|\.pptx)\b/.test(t) && mk.test(t)) return 'pptx';
+  if (/\b(css|stylesheet|style sheet)\b/.test(t) && mk.test(t)) return 'css';
+  return null;
+}
+
 // ── FILE GENERATORS ───────────────────────────────────────────────────────
 
 // Lazy-load a script from CDN
@@ -2692,6 +2707,7 @@ function newChat() {
   S.convs.unshift(newConv);
   S.chatId = id; S.msgs = [];
   S.codeStore.clear();
+  if (window.ArtifactDoc) { try { ArtifactDoc.reset(); } catch (_) {} }
   // Close nav on new chat (no messages yet)
   S.msgNavOpen = false;
   document.getElementById('msg-nav').classList.remove('open');
@@ -2713,6 +2729,8 @@ function loadChat(id) {
   if (Array.isArray(c.codeStore) && c.codeStore.length) {
     S.codeStore = new Map(c.codeStore);
   }
+  // ARTIFACT SYSTEM: restore this conv's versioned document artifacts before rendering
+  if (window.ArtifactDoc) { try { ArtifactDoc.restore(c.docArtifacts || []); } catch (_) {} }
   renderChatList(); renderMessages(); scrollBottom();
   // Auto-open nav if chat has messages (DeepSeek style)
   if (c.msgs.length > 0 && window.innerWidth > 600 && !S.msgNavOpen) {
@@ -2727,7 +2745,7 @@ function loadChat(id) {
 function deleteChat(id, e) {
   e.stopPropagation();
   S.convs = S.convs.filter(c => c.id !== id);
-  if (S.chatId === id) { S.chatId = null; S.msgs = []; renderMessages(); }
+  if (S.chatId === id) { S.chatId = null; S.msgs = []; if (window.ArtifactDoc) { try { ArtifactDoc.reset(); } catch (_) {} } renderMessages(); }
   renderChatList();
   // [CHANGED] Delete from IndexedDB too
   ChatStorage.deleteConversation(id).catch(e => console.warn('Atlas: deleteChat IndexedDB failed', e));
@@ -3214,7 +3232,7 @@ async function _doContinue(aiIdx, previousFull, sEl, mEl, aiRow) {
           const combined = previousFull + contFull;
           const indicator = document.getElementById('cont-indicator-' + aiIdx);
           if (indicator) indicator.remove();
-          sEl.innerHTML = renderMarkdown(combined, aiIdx);
+          sEl.innerHTML = renderMarkdown(window.ArtifactDoc ? ArtifactDoc.cleanForChat(combined) : combined, aiIdx);
           const newIndicator = document.createElement('span');
           newIndicator.id = 'cont-indicator-' + aiIdx;
           newIndicator.style.cssText = 'color:var(--acc);font-size:11px;opacity:.7;margin-left:6px;animation:tpulse 1s ease infinite';
@@ -3241,15 +3259,18 @@ async function _doContinue(aiIdx, previousFull, sEl, mEl, aiRow) {
 
   // Merge continuation into the existing AI message
   const newFull = previousFull + contFull;
+  // ── ARTIFACT DOCUMENT SYSTEM: finalize spans across the merged text ──
+  const _contClean = window.ArtifactDoc ? ArtifactDoc.finalizeStream(newFull) : newFull;
   const aiMsg = S.msgs[aiIdx];
   if (aiMsg) {
-    aiMsg.content = newFull;
+    aiMsg.content = _contClean;
     S.msgs[aiIdx] = aiMsg;
     const chat = S.convs.find(c => c.id === S.chatId);
     if (chat) chat.msgs = S.msgs;
     persist();
+    autoSaveConversation();
   }
-  if (sEl) sEl.innerHTML = renderMarkdown(newFull, aiIdx);
+  if (sEl) sEl.innerHTML = renderMarkdown(_contClean, aiIdx);
 
   // Recurse — check if the continuation itself was also truncated
   await handleContinuation(aiIdx, newFull, sEl, mEl, aiRow);
@@ -3380,7 +3401,12 @@ async function sendMessage() {
   // Detect edit intent — inject stored code blocks into system prompt only when needed
   // and only when Smart Patch Mode is enabled in settings.
   const smartPatchEnabled = S.cfg.smartPatch !== false;
-  const editMode = smartPatchEnabled && isEditIntent(text);
+  // ── ARTIFACT DOCUMENT SYSTEM ─────────────────────────────────────────────
+  // If the message targets a document artifact (explicit id/title mention, or
+  // an edit-style request with artifacts in play), the artifact-update flow
+  // takes over from the code-patch flow: the model re-emits the full artifact.
+  const _artTgt = (window.ArtifactDoc && !_agentActive) ? ArtifactDoc.relevantArtifact(text) : null;
+  const editMode = smartPatchEnabled && isEditIntent(text) && !_artTgt;
   const sysParts = [];
   // Global system prompt — always first
   const globalSP = S.cfg.globalSysPrompt?.trim();
@@ -3389,13 +3415,21 @@ async function sendMessage() {
   // Inject active skill system prompt
   const skillPrompt = getSkillSystemPrompt();
   if (skillPrompt) sysParts.push(skillPrompt);
-  if (editMode) sysParts.push(buildCodeStoreInjection(text));
+  if (_artTgt && window.ArtifactDoc) {
+    const _artCtx = ArtifactDoc.buildArtifactContextInjection(_artTgt);
+    if (_artCtx) sysParts.push(_artCtx);
+  } else if (editMode) {
+    sysParts.push(buildCodeStoreInjection(text));
+  }
   // Inject Don'ts preference
   const donts = S.cfg.donts?.trim();
   if (donts) sysParts.push('IMPORTANT — User preferences (Don\'ts):\n' + donts.split('\n').filter(Boolean).map(l => '- ' + l.replace(/^[-•*]\s*/,'')).join('\n'));
 
-  // Output format injection — from button selection or keyword detection
-  const detectedFmt = S.outputFmt || detectOutputFmt(text);
+  // Output format injection — from button selection or keyword detection.
+  // With the artifact system active, generic document words ("report",
+  // "essay"…) no longer hijack the legacy JSON pipeline — only explicit
+  // file-format asks (PDF/Word/PowerPoint/CSS) route to the generators.
+  const detectedFmt = S.outputFmt || (window.ArtifactDoc && !_agentActive ? detectOutputFmtStrict(text) : detectOutputFmt(text));
   if (detectedFmt && OUTPUT_FMT_CONFIG[detectedFmt]) {
     sysParts.push(buildFmtSystemPrompt(detectedFmt));
     if (!S.outputFmt) {
@@ -3406,6 +3440,15 @@ async function sendMessage() {
       document.getElementById('fmt-btn').classList.add('active');
       renderFmtBar();
     }
+  }
+
+  // ── ARTIFACT DOCUMENT SYSTEM: inject the artifact protocol. Skipped when an
+  // explicit output format or Agent Mode owns this message. beginStream()
+  // resets the incremental parser for this assistant turn — state is kept
+  // across auto-continuations, which append to the same raw text.
+  if (window.ArtifactDoc && !_agentActive && !detectedFmt) {
+    sysParts.push(ArtifactDoc.getSystemPrompt());
+    ArtifactDoc.beginStream();
   }
 
   // Only suggest filename comment for fresh code generation requests (not edits to existing code)
@@ -3595,7 +3638,7 @@ async function sendMessage() {
               if (!payload || payload === '[DONE]') continue;
               let chunk; try { chunk = JSON.parse(payload); } catch { continue; }
               const td = chunk.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-              if (td) { retryFull += td; if (sEl) sEl.innerHTML = renderMarkdown(retryFull, aiIdx); scrollBottom(); }
+              if (td) { retryFull += td; if (sEl) sEl.innerHTML = renderMarkdown(window.ArtifactDoc ? ArtifactDoc.cleanForChat(retryFull) : retryFull, aiIdx); scrollBottom(); }
               if (chunk.usageMetadata) {
                 aiMsg.iTok = chunk.usageMetadata.promptTokenCount || 0;
                 aiMsg.oTok = chunk.usageMetadata.candidatesTokenCount || 0;
@@ -3604,11 +3647,12 @@ async function sendMessage() {
               }
             }
           }
-          aiMsg.content = retryFull;
-          const retryPatches = extractPatches(retryFull);
+          const _retrySrc = window.ArtifactDoc ? ArtifactDoc.finalizeStream(retryFull) : retryFull;
+          aiMsg.content = _retrySrc;
+          const retryPatches = extractPatches(_retrySrc);
           if (retryPatches?.length) {
             const { applied, failed, blockChanges } = applyPatches(retryPatches);
-            let cleanProse = retryFull.replace(/```(?:patch|json)[\s\S]*?```/g, '').trim();
+            let cleanProse = _retrySrc.replace(/```(?:patch|json)[\s\S]*?```/g, '').trim();
             if (!cleanProse) { const parts = []; for (const [bid,{changed,added}] of blockChanges.entries()) { const tot=changed.size+added.size; parts.push(`\`${bid}\` — ${tot} line${tot!==1?'s':''} updated`); } if(failed.length) parts.push(...failed.map(f=>`⚠ ${f}`)); cleanProse=parts.join('\n\n'); }
             if (sEl) sEl.innerHTML = renderMarkdown(cleanProse, S.msgs.length - 1);
             aiMsg.content = cleanProse;
@@ -3656,7 +3700,7 @@ async function sendMessage() {
           if (textDelta) {
             full += textDelta;
             _appendGemAiRow(); // show aiRow, hide thinkRow on first token
-            sEl.innerHTML = renderMarkdown(full, aiIdx);
+            sEl.innerHTML = renderMarkdown(window.ArtifactDoc ? ArtifactDoc.cleanForChat(full) : full, aiIdx);
             scrollBottom();
           }
 
@@ -3797,7 +3841,7 @@ async function sendMessage() {
                 if (ftd) {
                   if (!gotText) { indicators.forEach(ind => ind.remove()); gotText = true; }
                   full += ftd;
-                  sEl.innerHTML = renderMarkdown(full, aiIdx);
+                  sEl.innerHTML = renderMarkdown(window.ArtifactDoc ? ArtifactDoc.cleanForChat(full) : full, aiIdx);
                   scrollBottom();
                 }
                 if (fc2.usageMetadata) { aiMsg.oTok += fc2.usageMetadata.candidatesTokenCount || 0; }
@@ -3827,12 +3871,14 @@ async function sendMessage() {
         }
       }
 
-      aiMsg.content = full;
+      // ── ARTIFACT DOCUMENT SYSTEM: swap artifact spans for card tokens ──
+      const _gemSrc = window.ArtifactDoc ? ArtifactDoc.finalizeStream(full) : full;
+      aiMsg.content = _gemSrc;
       // Check for patches
-      const patches = extractPatches(full);
+      const patches = extractPatches(_gemSrc);
       if (patches && patches.length > 0) {
         const { applied, failed, blockChanges } = applyPatches(patches);
-        let cleanProse = full.replace(/```patch[\s\S]*?```/g, '').trim();
+        let cleanProse = _gemSrc.replace(/```patch[\s\S]*?```/g, '').trim();
         if (!cleanProse) {
           const parts = [];
           for (const [bid, { changed, added }] of blockChanges.entries()) {
@@ -3881,6 +3927,18 @@ async function sendMessage() {
     } catch(e) {
       if (thinkRow._thinkTimer) clearInterval(thinkRow._thinkTimer);
       if (thinkRow.parentNode) thinkRow.remove();
+      // ── ARTIFACT DOCUMENT SYSTEM: keep partial content on user abort ──
+      if (e.name === 'AbortError' && window.ArtifactDoc) {
+        try {
+          const _partial = ArtifactDoc.finalizePartial();
+          if (_partial) {
+            aiMsg.content = _partial;
+            S.msgs[aiIdx] = aiMsg;
+            if (sEl) sEl.innerHTML = renderMarkdown(_partial, aiIdx);
+            autoSaveConversation();
+          }
+        } catch (_) {}
+      }
       if (e.name !== 'AbortError') {
         const errRow = document.createElement('div');
         errRow.className = 'msg-row ai';
@@ -4025,9 +4083,11 @@ async function sendMessage() {
         if (delta?.content) {
           full += delta.content;
           if (sEl) {
+            // ARTIFACT SYSTEM: strip artifact spans → [[ARTIFACT:id]] tokens (ingests too)
+            const _artDisp = window.ArtifactDoc ? ArtifactDoc.cleanForChat(full) : full;
             // Strip any in-progress patch block from the live display so the
             // raw JSON doesn't flash up while the model is still streaming it.
-            const displayFull = full.replace(/```(?:patch|json)\s*\n?\{[\s\S]*?"patches"[\s\S]*?\}\s*\n?```/g, '').replace(/```patch[\s\S]*?```/g, '').replace(/```patch[\s\S]*$/, '');
+            const displayFull = _artDisp.replace(/```(?:patch|json)\s*\n?\{[\s\S]*?"patches"[\s\S]*?\}\s*\n?```/g, '').replace(/```patch[\s\S]*?```/g, '').replace(/```patch[\s\S]*$/, '');
             let displayContent = renderMarkdown(displayFull, aiIdx);
             // Show pending tool calls
             if (Object.keys(toolCallBuffer).length > 0) {
@@ -4084,14 +4144,17 @@ async function sendMessage() {
       }
     }
 
+    // ── ARTIFACT DOCUMENT SYSTEM: swap artifact spans for card tokens ──
+    const _postSrc = window.ArtifactDoc ? ArtifactDoc.finalizeStream(full) : full;
+
     // Save final content
-    aiMsg.content = full;
+    aiMsg.content = _postSrc;
 
     // ── PATCH EDIT: check if response contains a patch block ──
-    const patches = extractPatches(full);
+    const patches = extractPatches(_postSrc);
     if (patches && patches.length > 0) {
       const { applied, failed, blockChanges } = applyPatches(patches);
-      let cleanProse = full.replace(/```(?:patch|json)[\s\S]*?```/g, '').trim();
+      let cleanProse = _postSrc.replace(/```(?:patch|json)[\s\S]*?```/g, '').trim();
 
       // If the AI sent no prose (just a patch block), synthesize a minimal
       // confirmation that links to each affected block so the message isn't empty.
@@ -4170,6 +4233,18 @@ async function sendMessage() {
     await handleContinuation(aiIdx, full, sEl, mEl, aiRow);
 
   } catch (e) {
+    // ── ARTIFACT DOCUMENT SYSTEM: user pressed Stop — keep whatever streamed
+    // (partial docs stay in the artifact store; the message keeps its tokens) ──
+    if (e.name === 'AbortError' && window.ArtifactDoc) {
+      try {
+        const _partial = ArtifactDoc.finalizePartial();
+        const _am = S.msgs[S.msgs.length - 1];
+        if (_partial && _am && _am.role === 'assistant') {
+          _am.content = _partial;
+          autoSaveConversation();
+        }
+      } catch (_) {}
+    }
     // If web search plugin caused a network-level failure, retry without it
     if (e.name !== 'AbortError' && S.webSearchMode && e.message === 'Failed to fetch') {
       toast('⚠️ Web search unsupported by this model — retrying without it', 'er');
@@ -4329,6 +4404,14 @@ function renderMarkdown(text, msgIdx) {
     return '\uE000MATH' + i + '\uE000';
   });
 
+  // ── ARTIFACT DOCUMENT SYSTEM: [[ARTIFACT:id]] tokens (and any raw artifact
+  // spans that survived an abort) become compact cards in the chat. Same
+  // placeholder pattern as code blocks so escaping can't corrupt them.
+  const _artCards = [];
+  if (window.ArtifactDoc) {
+    try { text = ArtifactDoc.extractCardTokens(text, _artCards); } catch (_) {}
+  }
+
   const codeBlocks = [];
   // Strip patch blocks before rendering — they are consumed by applyPatches, never shown
   text = text.replace(/```(?:patch|json)\s*\n?\{[\s\S]*?"patches"\s*:[\s\S]*?\}\s*\n?```/g, '');
@@ -4422,6 +4505,13 @@ function renderMarkdown(text, msgIdx) {
   codeBlocks.forEach((block, i) => {
     h = h.replace('\uE001CB' + i + '\uE001', block);
     h = h.replace(esc('\uE001CB' + i + '\uE001'), block);
+  });
+
+  _artCards.forEach((cid, i) => {
+    const cardHtml = window.ArtifactDoc ? (function(){ try { return ArtifactDoc.renderCardHTML(cid); } catch (_) { return ''; } })() : '';
+    const ph = '\uE003AC' + i + '\uE003';
+    h = h.split(ph).join(cardHtml);
+    h = h.split(esc(ph)).join(cardHtml);
   });
 
   _mathBlocks.forEach((m, i) => {
@@ -4828,6 +4918,7 @@ const ChatStorage = (() => {
           id: conv.id,
           title: conv.title,
           codeStore: conv.codeStore || [],
+          docArtifacts: conv.docArtifacts || [],
           msgs: (conv.msgs || []).slice(-MAX_CONV_MSGS).map(m => ({
             role: m.role,
             content: m.content,
@@ -5035,6 +5126,8 @@ async function autoSaveConversation() {
   if (!c) return;
   c.msgs = S.msgs;
   c.codeStore = Array.from(S.codeStore.entries());
+  // ARTIFACT SYSTEM: versioned document artifacts persist with the conversation
+  if (window.ArtifactDoc) { try { c.docArtifacts = ArtifactDoc.serialize(); } catch (_) {} }
   try {
     await ChatStorage.saveConversation(c);
     showSavedIndicator();
@@ -5481,6 +5574,7 @@ async function initSecureStorage() {
         if (Array.isArray(active.codeStore) && active.codeStore.length) {
           S.codeStore = new Map(active.codeStore);
         }
+        if (window.ArtifactDoc) { try { ArtifactDoc.restore(active.docArtifacts || []); } catch (_) {} }
       }
       renderChatList();
       if (S.msgs.length) renderMessages();
@@ -5508,6 +5602,7 @@ async function initSecureStorage() {
             if (Array.isArray(active.codeStore) && active.codeStore.length) {
               S.codeStore = new Map(active.codeStore);
             }
+            if (window.ArtifactDoc) { try { ArtifactDoc.restore(active.docArtifacts || []); } catch (_) {} }
           }
           renderChatList();
           if (S.msgs.length) renderMessages();
@@ -6140,6 +6235,9 @@ function buildApiMsgs() {
       // Strip large code blocks from history — they're already in codeStore and will
       // be re-injected if needed. This prevents the same file being sent twice.
       let content = m.content || '';
+      // ARTIFACT SYSTEM: card tokens become short references; live content
+      // rides in the system prompt via the artifact context injection.
+      if (window.ArtifactDoc) { try { content = ArtifactDoc.historyize(content); } catch (_) {} }
       if (content.length > 3000) {
         // Strip large fenced code blocks
         content = content.replace(/```[\w]*\n[\s\S]{1500,}?```/g, (match) => {
@@ -6242,6 +6340,8 @@ function activateArtifact(i) {
   document.getElementById('artifact-title').textContent = art.title;
   renderArtTabs();
   loadArtFrame(art);
+  // ARTIFACT SYSTEM: version selector / Word button / export label
+  if (window.ArtifactDoc) { try { ArtifactDoc.onActivate(art); } catch (_) {} }
   document.getElementById('artifact-panel').classList.add('open');
   document.getElementById('app').classList.add('art-open');
   if (window.innerWidth <= 600) document.getElementById('main').classList.add('art-open');
@@ -6266,7 +6366,7 @@ function activateArtifact(i) {
 function renderArtTabs() {
   const tabs = document.getElementById('artifact-tabs');
   tabs.innerHTML = _artifacts.map((a, i) =>
-    `<div class="art-tab ${i === _activeArt ? 'active' : ''}" onclick="activateArtifact(${i})">${a.lang.toUpperCase()} ${i+1}<span class="art-tab-close" onclick="event.stopPropagation();closeArtTab(${i})">✕</span></div>`
+    `<div class="art-tab ${i === _activeArt ? 'active' : ''}" onclick="activateArtifact(${i})">${(a._doc && window.ArtifactDoc) ? ArtifactDoc.tabLabel(a) : (a.lang.toUpperCase() + ' ' + (i+1))}<span class="art-tab-close" onclick="event.stopPropagation();closeArtTab(${i})">✕</span></div>`
   ).join('');
 }
 
@@ -6482,6 +6582,16 @@ function loadArtFrame(art) {
   // Non-project: hide the file switcher if it was previously visible
   _hideProjectFileSwitcher();
   src.textContent = art.code;
+
+  // ── ARTIFACT DOCUMENT SYSTEM: doc/mermaid kinds render their own views;
+  // code artifacts stream into the source pane (runner spins up at close) ──
+  if (art._doc && window.ArtifactDoc) {
+    try { if (ArtifactDoc.loadFrame(art)) return; } catch (_) {}
+    if (art.kind === 'code' && S.streaming) {
+      wrap.classList.add('src-mode');
+      document.getElementById('art-view-toggle').textContent = '▶ Preview';
+    }
+  }
 
   // If this is a doc/pptx/pdf preview, use the pre-rendered HTML
   if (art._previewHtml) {
@@ -9179,6 +9289,10 @@ function applyArtEdit() {
     return;
   }
 
+  // ── ARTIFACT DOCUMENT SYSTEM: manual edits to versioned artifacts create a
+  // new version in the artifact store instead of touching codeStore ──
+  if (art._doc && window.ArtifactDoc) { ArtifactDoc.applyManualEdit(art); return; }
+
   const newCode = document.getElementById('artifact-edit-area').value;
   const oldCode = art.code;
   art.code = newCode;
@@ -9433,6 +9547,10 @@ function openArtNewTab() {
 function dlArtifact() {
   const art = _artifacts[_activeArt];
   if (!art) return;
+
+  // ── ARTIFACT DOCUMENT SYSTEM: versioned artifacts get the export menu
+  // (Markdown / styled HTML / PDF / DOCX / Word editor / rendered SVG) ──
+  if (art._doc && window.ArtifactDoc) { ArtifactDoc.openExportMenu(); return; }
 
   // PROJECT MODE: download the active file's original content (not the
   // composite preview). If the user wants the whole project, they should

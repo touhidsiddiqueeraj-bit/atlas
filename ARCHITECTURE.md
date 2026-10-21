@@ -9,18 +9,21 @@ This document covers the internal architecture, data flow, and code organization
 Atlas is a single-page application with no framework, no build step, and no backend:
 
 ```
-index.html          (~1,000 lines) — All HTML elements, element IDs, inline event handler attributes
-atlas.css           (~1,850 lines) — All styles, CSS custom properties, animations, responsive rules
-atlas.js            (~11,300 lines) — All application logic (chat, streaming, artifacts, editors)
+index.html          (~1,040 lines) — All HTML elements, element IDs, inline event handler attributes
+atlas.css           (~2,000 lines) — All styles, CSS custom properties, animations, responsive rules
+atlas.js            (~11,500 lines) — All application logic (chat, streaming, artifacts, editors)
 modules/utils.js    (~55 lines) — Shared helpers: esc(), b64ToUtf8(), utf8ToB64(), clampLen()
-modules/agent.js    (~970 lines) — Agent Mode: file extraction, project preview, zip/serve bundle
+modules/agent.js    (~1,020 lines) — Agent Mode: file extraction, project preview, zip/serve bundle
+modules/artifact.js (~1,140 lines) — Artifact Document System: stream parser, versioned store,
+                                   doc/mermaid views, chat cards, exports, Word-editor bridge
 ```
 
 **Load order** (defined in `index.html`):
 
 1. `modules/utils.js` — defines `esc`, `b64ToUtf8`, `utf8ToB64` (used everywhere)
 2. `modules/agent.js` — defines `window.AgentMode` (used by `atlas.js`)
-3. `atlas.js` — the main app; reads `AgentMode` and `esc` from the global scope
+3. `modules/artifact.js` — defines `window.ArtifactDoc` (used by `atlas.js`)
+4. `atlas.js` — the main app; reads `AgentMode`, `ArtifactDoc` and `esc` from the global scope
 
 **Design principles:**
 - No framework — vanilla JS for zero dependency overhead
@@ -213,7 +216,71 @@ User types: "Change the button color to green"
 7. Rendered in chat with diff highlights
 ```
 
-### Artifact Lifecycle
+### Artifact Document Pipeline (Claude-style)
+
+```
+System prompt (always-on, unless Output-Fmt/Agent Mode owns the message)
+  └─ ARTIFACT DOCUMENT SYSTEM protocol: wrap substantial content in
+     <artifact identifier="kebab-id" type="mime" title="…">…</artifact>
+
+Streaming (per delta, all three loops: OpenAI-compat · Gemini (+429 retry,
++tool follow-up) · _doContinue):
+  └─ ArtifactDoc.cleanForChat(full)          — modules/artifact.js
+       ├─ ingest(full): incremental regex scan from _st.scanPos
+       │    ├─ opening tag found → parse attrs → push/reuse version →
+       │    │    activateArtifact() → panel opens → live render scheduled
+       │    ├─ closing tag found → finalize version → final render
+       │    └─ in-flight → update content → throttled _liveRender (140-900ms by kind)
+       ├─ clean text: spans replaced by [[ARTIFACT:id]] tokens (cached prefix
+       │    + partial-tag stripping so raw tags never flash in chat)
+       └─ returned to renderMarkdown() → cards via \uE003 placeholders
+
+Post-stream (aiMsg.content = ArtifactDoc.finalizeStream(full)):
+  └─ tokens persist in the message; artifact records persist in
+     chat.docArtifacts (IndexedDB) alongside chat.codeStore
+
+Re-render (renderMessages → renderMarkdown):
+  └─ extractCardTokens(): tokens (or raw spans from aborted streams —
+     "rescue" path, store wins) → compact cards with version meta
+
+Chat-driven update ("add a conclusion"):
+  └─ sendMessage → ArtifactDoc.relevantArtifact(text)
+       └─ explicit id/title mention, else edit-keywords + most recent doc;
+          code-block edit intent (isEditIntent) still wins for codeStore blocks
+       └─ buildArtifactContextInjection(rec): current content +
+          "re-emit COMPLETE artifact with SAME identifier" → sysParts
+       └─ model re-emits → new version (v1→v2), _collapseDup drops identical remissions
+
+Selection edit (doc iframe):
+  └─ text selected in srcdoc iframe → floating "✨ Edit with Claude" FAB →
+     postMessage {atlas-art-edit} → #art-edit-modal → prompt built with
+     identifier + selection → sendMessage()
+
+Exports / editors:
+  ├─ dlArtifact() → ArtifactDoc.openExportMenu() for _doc records
+  │    ├─ md / styled html (standalone buildDocHtml) / svg / .mmd / rendered svg
+  │    └─ pdf / docx: mdToDocxJson() → existing generatePDF / generateDOCX
+  ├─ "📝 Word" header button → mdToDocxJson() → bridge artifact
+  │    {id: '<identifier>:docx', lang: 'docx-content'} → _openVisualEditor()
+  └─ applyArtEdit() routes _doc records to ArtifactDoc.applyManualEdit()
+       → pushes a 'manual' version instead of touching codeStore
+
+Record shape (S-independent Map inside ArtifactDoc, mirrored into _artifacts):
+  { id, kind: doc|html|svg|mermaid|code, type, lang, title,
+    versions: [{content, ts, finalized, msgIdx, origin?}],
+    activeVersion, code (= versions[activeVersion].content), srcMsgIdx, _doc: true }
+
+Stream state (per user message; survives auto-continuation):
+  _st = { scanPos, raw, cleanText, rawBakedEnd, open, emissions }
+```
+
+Persistence keys: conversations store gains `docArtifacts` (array of records).
+`autoSaveConversation` serializes; `loadChat` / `initSecureStorage` restore via
+`ArtifactDoc.restore()`; `newChat` / `deleteChat` reset. Messages keep
+`[[ARTIFACT:id]]` tokens; `buildApiMsgs` historyizes them to short references
+(live content rides in the system prompt instead).
+
+### Artifact Lifecycle (code-block artifacts)
 
 ```
 Code block in AI response:

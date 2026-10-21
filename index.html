@@ -271,10 +271,12 @@
     <div id="art-resize-handle" title="Drag to resize"></div>
     <div id="artifact-hdr">
       <span id="artifact-title">preview</span>
+      <button class="art-btn art-doc-btn" id="art-ver-btn" style="display:none" data-click="ArtifactDoc.toggleVerMenu()" title="Version history">v1 ▾</button>
+      <button class="art-btn art-doc-btn" id="art-word-btn" style="display:none" data-click="ArtifactDoc.openWordForActive()" title="Open in the Word visual editor">📝 Word</button>
       <button class="art-btn" id="art-view-toggle" data-click="toggleArtSource()">⟨/⟩ Source</button>
       <button class="art-btn" id="art-edit-toggle" data-click="toggleArtEdit()">✏ Edit</button>
       <button class="art-btn" data-click="openArtNewTab()">↗ New tab</button>
-      <button class="art-btn" data-click="dlArtifact()">⬇ Download</button>
+      <button class="art-btn" id="art-dl-btn" data-click="dlArtifact()">⬇ Download</button>
       <button class="art-btn" id="art-drive-btn" data-click="uploadArtToDrive()" style="display:none" title="Upload to Google Drive">☁ Drive</button>
       <button class="art-btn close" data-click="closeArtifact()">✕ Close</button>
     </div>
@@ -953,6 +955,7 @@
 
 <script src="modules/utils.js"></script>
 <script src="modules/agent.js"></script>
+<script src="modules/artifact.js"></script>
 <script src="atlas.js"></script>
 
 <!-- TOOL CONFIRM MODAL -->
@@ -1013,6 +1016,20 @@
       <button class="acct-btn-secondary" data-click="closeAcctModal()">Dismiss — I'll fix this later</button>
     </div>
     <div class="acct-note">Your API key <span id="acct-key-hint" style="font-family:'DM Mono',monospace;color:var(--acc)"></span> is valid. This is an account-level restriction, not a code issue.</div>
+  </div>
+</div>
+
+<!-- ARTIFACT DOCUMENT SYSTEM: "Edit with Claude" selection modal -->
+<div id="art-edit-modal" style="display:none">
+  <div id="art-edit-card">
+    <div id="art-edit-head">✨ Edit with Claude</div>
+    <div id="art-edit-doc"></div>
+    <div id="art-edit-quote"></div>
+    <textarea id="art-edit-input" placeholder="Describe your change — e.g. &quot;make this section more concise and add a metric&quot;" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')ArtifactDoc.sendEditModal()"></textarea>
+    <div id="art-edit-actions">
+      <button id="art-edit-cancel" data-click="ArtifactDoc.cancelEditModal()">Cancel</button>
+      <button id="art-edit-send" data-click="ArtifactDoc.sendEditModal()">Send to Claude →</button>
+    </div>
   </div>
 </div>
 </body>
