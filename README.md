@@ -2,7 +2,7 @@
 
 **Atlas** is a single-page AI client for getting real work done — writing, coding, designing, editing, analyzing, and generating content. No backend, no build step, no telemetry. Runs entirely in your browser.
 
-- **5 AI providers**: OpenRouter, DeepSeek, Gemini, OpenAI, local (Ollama/LM Studio/llama.cpp)
+- **6 AI providers**: OpenRouter, DeepSeek, Gemini, OpenAI, Custom (any OpenAI-compatible endpoint), local WebGPU
 - **Agent Mode**: Generate multi-file websites, preview them live, edit any file, and serve to other devices on your Wi-Fi — all from the sidebar
 - **Offline-capable**: WebGPU local models via WebLLM (TinyLlama, StableLM, Gemma)
 - **No build step**: Five files — `index.html`, `atlas.css`, `atlas.js`, `modules/utils.js`, `modules/agent.js` — serve from any HTTP server
@@ -21,8 +21,8 @@ python3 -m http.server 8000
 # Open http://localhost:8000
 ```
 
-1. Open **Settings** (gear icon) → **API Keys**
-2. Add at least one API key (OpenRouter, DeepSeek, Gemini, or OpenAI)
+1. Open **Settings** (gear icon) → **🔌 API** tab → **API Keys**
+2. Add at least one API key (OpenRouter, DeepSeek, Gemini, OpenAI) — or connect any OpenAI-compatible endpoint under **⚡ Custom**
 3. Select a model from the dropdown
 4. Start chatting
 
@@ -41,7 +41,7 @@ Requires Chrome/Edge 113+ with WebGPU support.
 
 ### AI Chat
 
-Chat with 5 provider backends through a unified interface:
+Chat with 6 provider backends through a unified interface:
 
 | Provider | Key required | Model selection | Streaming | Notes |
 |----------|-------------|-----------------|-----------|-------|
@@ -49,7 +49,15 @@ Chat with 5 provider backends through a unified interface:
 | **DeepSeek** | API key | Fallback list, fetches live on connect | ✅ | V4/V3/R1 series |
 | **Gemini** | API key | Live model list from API | ✅ | Web search grounding, free tier |
 | **OpenAI** | API key | Live model list from API | ✅ | GPT-4o, GPT-4.1 series |
-| **Local** | None | Auto-detect Ollama, configurables | ✅ | Ollama, LM Studio, llama.cpp |
+| **⚡ Custom** | Optional | `/v1/models` auto-discovery, Ollama `/api/tags` fallback, or manual model IDs | ✅ | Any OpenAI-compatible endpoint — local or cloud |
+
+**Custom endpoints** — the **⚡ Custom** tab (Settings → API) connects to *any* OpenAI-compatible server:
+
+- **Local servers** — Ollama (`:11434`), LM Studio (`:1234`), llama.cpp (`:8080`), Jan (`:1337`), vLLM (`:8000`), LiteLLM (`:4000`), and anything else speaking the OpenAI chat-completions protocol
+- **Cloud gateways** — one-click presets for Groq, Mistral, Together, Fireworks, xAI, Cerebras, SambaNova, and DeepInfra (paste their API key, hit Connect)
+- **Smart URL handling** — enter the base URL with or without `/v1`; Atlas probes layouts (`/v1/chat/completions` vs `/chat/completions`), remembers the working one, and never double-appends `/v1`
+- **Model discovery** — tries OpenAI-style `/v1/models`, then Ollama-native `/api/tags`, then your manually-added model IDs (with removable chips) for servers that don't list models
+- **Bearer auth** — optional API key is sent as `Authorization: Bearer …` for gateways that require it
 
 **Streaming** — responses appear token-by-token as they arrive. **Abort** — click the send button (now a stop icon) mid-generation. **Continuation** — truncated responses get a "Continue" button to resume. **Web search** — toggle to ground responses with real-time search results (OpenRouter plugin or Gemini Google Search grounding).
 
@@ -282,22 +290,19 @@ Run small LLMs directly in the browser using WebLLM (v0.2.46) with WebGPU accele
 
 ## Configuration
 
-### Settings Panel (10 sections)
+### Settings Panel (5 tabs)
 
-Open via the gear icon:
+Open via the gear icon — organized into tabs so nothing is crowded:
 
-| Section | Controls |
-|---------|----------|
-| **Model** | Temperature, max tokens, top P, image size/model |
-| **Google** | Sign in/out, account card |
-| **API Keys** | Inline tabbed UI for each provider (OpenRouter, DeepSeek, Gemini, OpenAI) |
-| **System Prompt** | Global system prompt textarea + 4 presets (Smart, Concise, Technical, Clear) |
-| **Output / Style** | Smart Patch toggle, "Don'ts" textarea (things to avoid) |
-| **Budget** | Total cost display, budget cap input |
-| **Skills** | Smart Auto-Detect toggle, built-in skill badges, custom skill editor |
-| **Storage** | Data export/import, clear all, storage usage |
-| **Local Model** | Fallback toggle, model selector, download button with progress |
-| **Themes & Fonts** | Dark/Light toggle, 9 fonts (DM Sans, Inter, Geist, Fira Code, JetBrains Mono, Source Serif 4, Lora, Nunito, Syne), font size slider (12–20px), 3 chat density modes |
+| Tab | Contains |
+|-----|----------|
+| **🎨 Appearance** | Dark/Light toggle, 9 fonts (DM Sans, Inter, Geist, Fira Code, JetBrains Mono, Source Serif 4, Lora, Nunito, Syne), font size slider (12–20px), 3 chat density modes |
+| **🎛️ Model** | Temperature, max tokens, top P, image size/model, Smart Patch toggle, budget cap, session cost + Gemini tier |
+| **🔌 API** | API Keys (inline tabbed UI per provider + ⚡ Custom OpenAI-compatible endpoint), Local WebGPU model manager, Google account |
+| **✦ Skills** | Smart Auto-Detect toggle, skill badges, global system prompt + presets, "Don'ts" textarea |
+| **💾 Data** | Storage usage meter, API-key persistence controls, export/import chats, clear all data |
+
+Handy shortcuts: the sidebar **cost tracker** opens the Model tab, the **security icon** opens Data, the **skills button** opens Skills, and the sidebar footer opens API.
 
 ### Themes & Display
 

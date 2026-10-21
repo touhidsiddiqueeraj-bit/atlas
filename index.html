@@ -105,7 +105,7 @@
     <div id="chatlist"></div>
     <div class="sb-ft">
       <!-- [MODIFIED] Sidebar footer: Google sign-in or API key status -->
-      <div id="sb-google-signed-in" style="display:none;padding:8px 10px;border-radius:var(--rs);background:var(--surf);border:1px solid var(--bdr);margin-bottom:6px;cursor:pointer" data-click="openSettings()" title="Google account — click to open settings">
+      <div id="sb-google-signed-in" style="display:none;padding:8px 10px;border-radius:var(--rs);background:var(--surf);border:1px solid var(--bdr);margin-bottom:6px;cursor:pointer" data-click="openSettings('api')" title="Google account — click to open settings">
         <div style="display:flex;align-items:center;gap:8px">
           <div id="sb-google-avatar-wrap" style="width:26px;height:26px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex-shrink:0;overflow:hidden">
             <span id="sb-google-avatar-initial">G</span>
@@ -155,7 +155,7 @@
         </div>
       </div>
 
-      <div id="cost-tracker" data-click="openSettings()">
+      <div id="cost-tracker" data-click="openSettings('model')">
         <span class="ct-label">Spent</span>
         <span id="cost-val">$0.0000</span>
         <span class="ct-div">|</span>
@@ -164,7 +164,7 @@
       </div>
 
       <!-- [ADDED] Security status indicator in topbar -->
-      <button id="sec-status-btn" data-click="openSettings()" title="Storage security status — click to open settings"
+      <button id="sec-status-btn" data-click="openSettings('data')" title="Storage security status — click to open settings"
         style="background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:var(--rx);font-size:13px;transition:all .15s;display:flex;align-items:center;gap:4px;color:var(--tx3);flex-shrink:0">
         <span id="sec-status-icon">⚠️</span>
       </button>
@@ -235,7 +235,7 @@
           <button class="i-btn" id="sys-btn" data-click="toggleSys()" title="System prompt">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           </button>
-          <button class="i-btn" id="skills-btn" data-click="event.stopPropagation();openSettings(); document.getElementById('settings-modal').scrollTop=5000" title="Skills (in Settings)" style="display:none">
+          <button class="i-btn" id="skills-btn" data-click="event.stopPropagation();openSettings('skills')" title="Skills (in Settings)" style="display:none">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1l1.8 3.6L14 5.4l-3 2.9.7 4.1L8 10.4l-3.7 2 .7-4.1L2 5.4l4.2-.8z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
           </button>
           <button class="i-btn" id="web-search-btn" data-click="toggleWebSearch()" title="Web search (OpenRouter plugin)">
@@ -555,9 +555,17 @@
 
 <!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settings-modal">
-  <div class="modal wide">
+  <div class="modal wide stabs-modal">
     <div class="modal-title">Settings</div>
-    <div class="divider"></div>
+    <div class="stabs-bar" id="settings-tabs">
+      <button class="stab-btn active" id="stab-btn-appearance" data-click="switchSettingsTab('appearance')">🎨 Appearance</button>
+      <button class="stab-btn" id="stab-btn-model" data-click="switchSettingsTab('model')">🎛️ Model</button>
+      <button class="stab-btn" id="stab-btn-api" data-click="switchSettingsTab('api')">🔌 API</button>
+      <button class="stab-btn" id="stab-btn-skills" data-click="switchSettingsTab('skills')">✦ Skills</button>
+      <button class="stab-btn" id="stab-btn-data" data-click="switchSettingsTab('data')">💾 Data</button>
+    </div>
+    <div class="stabs-body" id="settings-tab-body">
+    <div class="stabs-panel active" id="stab-appearance">
     <div class="settings-group">
       <div class="modal-label">Appearance</div>
       <div class="settings-row">
@@ -592,7 +600,8 @@
         <span class="settings-row-val" id="val-density">Normal</span>
       </div>
     </div>
-    <div class="divider"></div>
+    </div><!-- /stab-appearance -->
+    <div class="stabs-panel" id="stab-model">
     <div class="settings-group">
       <div class="modal-label">Generation</div>
       <div class="settings-row"><span class="settings-row-label">Temperature</span><input type="range" class="slider" id="sl-temp" min="0" max="2" step="0.05" value="0.55" oninput="document.getElementById('val-temp').textContent=parseFloat(this.value).toFixed(2)"><span class="settings-row-val" id="val-temp">0.55</span></div>
@@ -632,7 +641,7 @@
         <span style="font-size:13px;color:var(--tx2)">Total spent this session</span>
         <span id="modal-cost" style="font-family:'DM Mono',monospace;font-size:14px;color:var(--grn)">$0.0000</span>
       </div>
-      <div id="gemini-free-note" style="display:none!important;margin-top:6px;font-size:11px;color:var(--grn);background:var(--grnd);border:1px solid rgba(45,212,160,.2);border-radius:var(--rx);padding:6px 10px">
+      <div id="gemini-free-note" style="display:none!important;margin-top:6px;font-size:11px;color:var(--grn);background:var(--grnd);border:1px solid rgba(45,212,160,.2);border-radius:var(--rx);padding:6px 10px"></div>
       <div id="gemini-cost-track-row" style="display:none;margin-top:8px">
         <div class="settings-row" style="margin-bottom:0">
           <span class="settings-row-label" style="font-size:12px;color:var(--tx2)">Gemini tier</span>
@@ -642,7 +651,8 @@
       </div>
       <div style="margin-top:10px"><button class="modal-btn secondary" data-click="resetCost()" style="font-size:11px;padding:6px 12px">Reset counter</button></div>
     </div>
-    <div class="divider"></div>
+    </div><!-- /stab-model -->
+    <div class="stabs-panel" id="stab-data">
     <!-- [CHANGED] Memory → Storage & Security section -->
     <div class="settings-group">
       <div class="modal-label">Storage &amp; Security</div>
@@ -690,7 +700,8 @@
       </div>
       <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllData(this)">
     </div>
-    <div class="divider"></div>
+    </div><!-- /stab-data -->
+    <div class="stabs-panel" id="stab-skills">
     <div class="settings-group">
       <div class="modal-label">Global System Prompt</div>
       <div style="font-size:11px;color:var(--tx3);margin-bottom:8px;line-height:1.55">Injected into every conversation. Sets tone, format, and behavior across all models.</div>
@@ -739,7 +750,8 @@
       <div style="font-size:11px;color:var(--tx3);margin-bottom:10px;line-height:1.5">Things you don't want Atlas / the model to do. These are injected into the system prompt automatically.</div>
       <textarea id="donts-input" style="width:100%;min-height:88px;padding:9px 12px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);color:var(--tx1);font-size:clamp(12px,1.5vw,13px);font-family:'DM Mono',monospace;outline:none;resize:vertical;transition:border-color .15s;line-height:1.55" placeholder="e.g. Don't add unnecessary caveats&#10;Don't use bullet points&#10;Don't be overly verbose" oninput="this.style.borderColor='var(--acc2)'" onblur="this.style.borderColor='var(--bdr)'"></textarea>
     </div>
-    <div class="divider"></div>
+    </div><!-- /stab-skills -->
+    <div class="stabs-panel" id="stab-api">
     <!-- [MODIFIED] Google Sign-In — for chat history sync only -->
     <div class="settings-group" id="google-signin-section">
       <div class="modal-label">Google Account</div>
@@ -767,27 +779,49 @@
       <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;line-height:1.55">Keys are stored securely in the browser and never sent anywhere except the respective AI provider.</div>
       <!-- Provider tabs -->
       <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">
-        <button id="aks-btn-openrouter" data-click="aksSwitch('openrouter',this)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);color:#fff">OpenRouter</button>
-        <button id="aks-btn-deepseek"   data-click="aksSwitch('deepseek',this)"   style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">DeepSeek</button>
-        <button id="aks-btn-gemini"     data-click="aksSwitch('gemini',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Gemini</button>
-        <button id="aks-btn-openai"     data-click="aksSwitch('openai',this)"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">OpenAI</button>
-        <button id="aks-btn-local"      data-click="aksSwitch('local',this)"      style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Local</button>
+        <button id="aks-btn-openrouter" data-click="aksSwitch('openrouter')" style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--acc);color:#fff">OpenRouter</button>
+        <button id="aks-btn-deepseek"   data-click="aksSwitch('deepseek')"   style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">DeepSeek</button>
+        <button id="aks-btn-gemini"     data-click="aksSwitch('gemini')"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">Gemini</button>
+        <button id="aks-btn-openai"     data-click="aksSwitch('openai')"     style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)">OpenAI</button>
+        <button id="aks-btn-local"      data-click="aksSwitch('local')"      style="padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;background:var(--hov);color:var(--tx2)" title="Any OpenAI-compatible endpoint">⚡ Custom</button>
       </div>
-      <!-- Key input area -->
+      <!-- Custom endpoint config (shown for Custom tab) -->
       <div id="aks-local-url-wrap" style="display:none;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Server URL</div>
-        <input type="text" id="aks-local-url" placeholder="http://localhost:11434" style="width:100%;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Mono',monospace;outline:none;box-sizing:border-box">
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">
-          <button data-click="document.getElementById('aks-local-url').value='http://localhost:11434'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">Ollama :11434</button>
-          <button data-click="document.getElementById('aks-local-url').value='http://localhost:1234'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">LM Studio :1234</button>
-          <button data-click="document.getElementById('aks-local-url').value='http://localhost:8080'" style="padding:3px 8px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer">llama.cpp :8080</button>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Endpoint URL <span style="color:var(--tx3);font-weight:400">— /v1 is auto-detected, with or without it</span></div>
+        <input type="text" id="aks-local-url" placeholder="http://localhost:11434  or  https://api.groq.com/openai/v1" style="width:100%;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Mono',monospace;outline:none;box-sizing:border-box">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='http://localhost:11434'">Ollama :11434</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='http://localhost:1234'">LM Studio :1234</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='http://localhost:8080'">llama.cpp :8080</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='http://localhost:1337'">Jan :1337</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='http://localhost:8000'">vLLM :8000</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='http://localhost:4000'">LiteLLM :4000</button>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.groq.com/openai/v1'">Groq</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.mistral.ai/v1'">Mistral</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.together.xyz/v1'">Together</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.fireworks.ai/inference/v1'">Fireworks</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.x.ai/v1'">xAI</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.cerebras.ai/v1'">Cerebras</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.sambanova.ai/v1'">SambaNova</button>
+          <button class="oa-preset" data-click="document.getElementById('aks-local-url').value='https://api.deepinfra.com/v1/openai'">DeepInfra</button>
+        </div>
+        <!-- Manual model entry for endpoints without a model-list API -->
+        <div style="font-size:11px;color:var(--tx2);margin:10px 0 4px">Model ID (optional — for servers that don't list models)</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="aks-manual-input" placeholder="e.g. llama3.1:8b or meta-llama/Llama-3.1-8B-Instruct" style="flex:1;padding:6px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:11px;font-family:'DM Mono',monospace;outline:none" onkeydown="if(event.key==='Enter'){event.preventDefault();aksAddManualModel()}">
+          <button class="modal-btn secondary" data-click="aksAddManualModel()" style="font-size:11px;padding:6px 12px;flex-shrink:0">+ Add</button>
+        </div>
+        <div id="aks-manual-wrap" style="display:none;margin-top:6px">
+          <div id="aks-manual-list" style="display:flex;flex-wrap:wrap;gap:5px"></div>
         </div>
       </div>
       <div style="font-size:11px;color:var(--tx2);margin-bottom:4px" id="aks-key-label">API Key</div>
       <div id="aks-desc" style="font-size:10px;color:var(--tx3);margin-bottom:6px"></div>
       <div style="display:flex;gap:6px;align-items:center">
         <input type="password" id="aks-key-input" placeholder="Paste key here…" autocomplete="off" style="flex:1;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:12px;font-family:'DM Mono',monospace;outline:none">
-        <button class="modal-btn primary" data-click="aksSaveKey()" style="font-size:12px;padding:7px 14px;flex-shrink:0">Connect</button>
+        <button class="modal-btn primary" id="aks-connect-btn" data-click="aksSaveKey()" style="font-size:12px;padding:7px 14px;flex-shrink:0">Connect</button>
         <button class="modal-btn secondary" id="aks-clear-btn" data-click="aksClearKey()" style="font-size:12px;padding:7px 10px;flex-shrink:0;color:var(--red)">✕</button>
       </div>
       <div id="aks-err" style="color:var(--red);font-size:11px;margin-top:6px;display:none"></div>
@@ -847,7 +881,8 @@
         <div id="local-model-cached-list" style="display:flex;flex-wrap:wrap;gap:5px"></div>
       </div>
     </div>
-    <div class="divider"></div>
+    </div><!-- /stab-api -->
+    </div><!-- /stabs-body -->
     <div class="modal-actions">
       <button class="modal-btn secondary" data-click="closeSettings()">Cancel</button>
       <button class="modal-btn primary" data-click="saveSettings()">Save</button>

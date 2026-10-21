@@ -903,9 +903,11 @@ async function autoDetectSkill(text) {
       skillId = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase() || 'none';
     } else {
       const ep = S.provider === 'deepseek' ? 'https://api.deepseek.com/chat/completions'
-               : S.provider === 'local' ? (S.localBaseUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/v1/chat/completions'
+               : S.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions'
+               : S.provider === 'local' ? oaChatUrl(S.localBaseUrl)
                : 'https://openrouter.ai/api/v1/chat/completions';
       const auth = S.provider === 'deepseek' ? S.deepseekKey
+                 : S.provider === 'openai' ? S.openaiKey
                  : S.provider === 'local' ? (S.localKey || 'none')
                  : S.key;
       const modelId = (S.model.apiId || S.model.id).replace(/:(free|nitro|floor|beta)$/, '');
@@ -1941,12 +1943,8 @@ function renderToolCall(toolCall, result, status) {
 
 // ── API KEY ────────────────────────────────────────────────────────────────
 function openKeyModal() {
-  // [MODIFIED] No popup — open Settings directly and scroll to API keys section
-  openSettings();
-  setTimeout(() => {
-    const el = document.getElementById('api-key-section');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 150);
+  // [MODIFIED] No popup — open Settings directly on the API tab
+  openSettings('api');
 }
 function closeKeyModal() { /* no-op — modal removed */ }
 
@@ -2254,86 +2252,155 @@ async function saveDeepSeekKey(val, errEl) {
   }
 }
 
-// ── LOCAL AI PROVIDER ──────────────────────────────────────────────────────
-// Connects to any OpenAI-compatible local server (Ollama, LM Studio, llama.cpp, etc.)
+// ── LOCAL / CUSTOM AI PROVIDER ─────────────────────────────────────────────
+// Connects to ANY OpenAI-compatible endpoint — local (Ollama, LM Studio,
+// llama.cpp, vLLM, Jan, …) or cloud (Groq, Mistral, Together, Fireworks,
+// xAI, Cerebras, SambaNova, DeepInfra, Perplexity, LiteLLM proxies, …).
+
+// True when the app has at least one usable provider credential.
+function hasAnyKey() {
+  return !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localKey
+    || (S.localBaseUrl && S.localBaseUrl !== 'http://localhost:11434')
+    || (Array.isArray(S.localManualModels) && S.localManualModels.length));
+}
+
+// Normalize a user-typed endpoint: trim, strip trailing slashes, add scheme.
+function oaNormalizeBase(raw) {
+  let u = (raw || '').trim().replace(/\/+$/, '');
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) u = 'http://' + u; // allow "localhost:11434"
+  return u;
+}
+// URL already carries a version segment? (/v1, /v2, /v1beta, /openai/v1 …)
+function oaHasVersion(u) { return /\/v\d+[a-z]*$/i.test(u || ''); }
+// Strip a trailing version segment (for native Ollama /api/tags fallback).
+function oaRoot(u) { return (u || '').replace(/\/v\d+[a-z]*$/i, ''); }
+// Candidate URLs for an OpenAI API path ('/models', '/chat/completions').
+// Order: user-specified layout first, then canonical /v1 layout, then
+// gateway layout without /v1 (e.g. Perplexity). Deduped.
+function oaCandidateUrls(raw, path) {
+  const u = oaNormalizeBase(raw);
+  if (!u) return [];
+  const out = [];
+  if (oaHasVersion(u)) {
+    out.push(u + path);               // e.g. https://api.groq.com/openai/v1 + /models
+    out.push(oaRoot(u) + '/v1' + path);
+  } else {
+    out.push(u + '/v1' + path);       // canonical OpenAI layout
+    out.push(u + path);               // gateways that omit /v1
+  }
+  return [...new Set(out)];
+}
+// Simple single-URL builders (first candidate) for non-critical calls.
+function oaChatUrl(raw) { return oaCandidateUrls(raw, '/chat/completions')[0] || ''; }
+function oaModelsUrl(raw) { return oaCandidateUrls(raw, '/models')[0] || ''; }
+
+// fetch() for chat completions on the custom provider. Probes URL variants on
+// 404/405/501 and remembers the working one in S._localEpVariant (persisted).
+async function oaChatFetch(requestBody, signal) {
+  const cands = oaCandidateUrls(S.localBaseUrl || 'http://localhost:11434', '/chat/completions');
+  const headers = { 'Content-Type': 'application/json' };
+  if (S.localKey) headers['Authorization'] = 'Bearer ' + S.localKey;
+  const saved = (S._localEpVariant && S._localEpVariant.baseUrl === (S.localBaseUrl || '') && Number.isInteger(S._localEpVariant.chat))
+    ? S._localEpVariant.chat : 0;
+  const order = [saved, ...cands.map((_, i) => i).filter(i => i !== saved)];
+  let last = null;
+  for (const i of order) {
+    const res = await fetch(cands[i], { method: 'POST', headers, body: JSON.stringify(requestBody), signal });
+    if (res.ok || ![404, 405, 501].includes(res.status)) {
+      if (i !== saved) { S._localEpVariant = { baseUrl: S.localBaseUrl || '', chat: i }; persist(); }
+      return res;
+    }
+    last = res;
+  }
+  return last;
+}
 
 async function saveLocalKey(optionalKey, errEl) {
   const urlInput = document.getElementById('local-url-input');
-  const baseUrl = (urlInput?.value || '').trim().replace(/\/+$/, '');
+  const baseUrl = oaNormalizeBase(urlInput?.value || '');
   if (!baseUrl) {
-    errEl.textContent = 'Enter a server URL (e.g. http://localhost:11434)';
+    errEl.textContent = 'Enter an endpoint URL (e.g. http://localhost:11434 or https://api.groq.com/openai/v1)';
     errEl.style.display = 'block';
     return;
   }
   try { new URL(baseUrl); } catch {
-    errEl.textContent = 'Invalid URL: enter a valid server URL (e.g. http://localhost:11434)';
+    errEl.textContent = 'Invalid URL: enter a valid endpoint URL (e.g. http://localhost:11434)';
     errEl.style.display = 'block';
     return;
   }
   try {
     S.localBaseUrl = baseUrl;
     S.localKey = optionalKey || '';
+    S._localEpVariant = null;
     await loadLocalModels(true);
     document.getElementById('key-dot').classList.remove('off');
-    document.getElementById('key-text').textContent = 'Local: ' + baseUrl.replace(/^https?:\/\//, '');
+    document.getElementById('key-text').textContent = 'Custom: ' + baseUrl.replace(/^https?:\/\//, '');
     closeKeyModal();
     KeyStore.saveKey('local', JSON.stringify({ baseUrl: S.localBaseUrl, key: S.localKey }), false).then(src => updateSecurityStatus(src));
     persist();
-    toast('Local AI connected — ' + S.allModels.length + ' model(s) found', 'ok');
+    toast('Endpoint connected — ' + S.allModels.length + ' model(s) found', 'ok');
   } catch(e) {
-    errEl.textContent = 'Could not connect: ' + e.message + '. Make sure your local server is running and CORS is enabled.';
+    errEl.textContent = 'Could not connect: ' + e.message + '. Make sure the server is running and CORS is enabled.';
     errEl.style.display = 'block';
   }
 }
 
 async function loadLocalModels(throwOnFail = false) {
-  const base = (S.localBaseUrl || 'http://localhost:11434').replace(/\/+$/, '');
+  const base = oaNormalizeBase(S.localBaseUrl || 'http://localhost:11434');
   const headers = { 'Content-Type': 'application/json' };
   if (S.localKey) headers['Authorization'] = 'Bearer ' + S.localKey;
 
   let models = [];
+  let host = base;
+  try { host = new URL(base).host; } catch(e) {}
+  const toModel = (id, extraDesc) => ({
+    id, apiId: id,
+    name: id.replace(/:latest$/, ''),
+    context_length: 32768,
+    pricing: { prompt: '0', completion: '0' },
+    description: (extraDesc || 'OpenAI-compatible') + ' — ' + host,
+  });
 
-  // Try OpenAI-compatible /v1/models endpoint (LM Studio, Ollama 0.2+, llama.cpp)
-  try {
-    const res = await fetch(base + '/v1/models', { headers });
-    if (res.ok) {
-      const data = await res.json();
-      const raw = data.data || data.models || [];
-      models = raw.map(m => {
-        const id = m.id || m.name || String(m);
-        return {
-          id, apiId: id,
-          name: id.replace(/:latest$/, ''),
-          context_length: m.context_length || 32768,
-          pricing: { prompt: '0', completion: '0' },
-          description: 'Local — ' + base,
-        };
-      }).sort((a, b) => a.name.localeCompare(b.name));
-    }
-  } catch(e) { /* try next endpoint */ }
+  // 1) OpenAI-compatible model listing: /v1/models (or /models when URL is versioned)
+  for (const mu of oaCandidateUrls(base, '/models')) {
+    if (models.length) break;
+    try {
+      const res = await fetch(mu, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const raw = Array.isArray(data) ? data : (data.data || data.models || []);
+        models = raw.map(m => {
+          const id = m.id || m.name || m.model || String(m);
+          return { ...toModel(id), context_length: m.context_length || m.max_model_len || 32768 };
+        }).sort((a, b) => a.name.localeCompare(b.name));
+      }
+    } catch(e) { /* try next candidate */ }
+  }
 
-  // Fallback: Ollama native /api/tags
+  // 2) Fallback: Ollama native /api/tags
   if (!models.length) {
     try {
-      const res = await fetch(base + '/api/tags', { headers });
+      const res = await fetch(oaRoot(base) + '/api/tags', { headers });
       if (res.ok) {
         const data = await res.json();
         models = (data.models || []).map(m => {
           const id = m.name || m.model || String(m);
-          return {
-            id, apiId: id,
-            name: id.replace(/:latest$/, ''),
-            context_length: 32768,
-            pricing: { prompt: '0', completion: '0' },
-            description: 'Ollama — ' + (m.details?.parameter_size || '') + ' ' + (m.details?.family || ''),
-          };
+          return { ...toModel(id, 'Ollama'), description: 'Ollama — ' + (m.details?.parameter_size || '') + ' ' + (m.details?.family || '') };
         }).sort((a, b) => a.name.localeCompare(b.name));
       }
     } catch(e) { /* silent */ }
   }
 
+  // 3) Merge manually added model IDs (endpoints without a model-list API)
+  const manual = Array.isArray(S.localManualModels) ? S.localManualModels : [];
+  for (const mid of manual) {
+    if (mid && !models.some(m => m.id === mid)) models.push(toModel(mid, 'Manual'));
+  }
+  models.sort((a, b) => a.name.localeCompare(b.name));
+
   if (!models.length && throwOnFail) {
-    throw new Error('No models found at ' + base + '. Is your local server running?');
+    throw new Error('No models found at ' + base + '. Is the server running? You can also add a model ID manually.');
   }
 
   S.localModels = models;
@@ -2348,6 +2415,37 @@ async function loadLocalModels(throwOnFail = false) {
     const pick = (last && models.find(m => m.id === last.id)) || models[0];
     if (pick) selectModel(pick.id);
   }
+}
+
+// Keep the KeyStore local-config JSON in sync (baseUrl + key + manual models)
+function _syncLocalKeyStore() {
+  if (!S.localBaseUrl) return;
+  try {
+    KeyStore.saveKey('local', JSON.stringify({
+      baseUrl: S.localBaseUrl, key: S.localKey || '',
+      manualModels: Array.isArray(S.localManualModels) ? S.localManualModels : [],
+    }), false).then(src => updateSecurityStatus(src));
+  } catch(e) { /* silent */ }
+}
+
+// Add / remove manually-specified model IDs for the custom endpoint.
+function addLocalManualModel(id) {
+  id = (id || '').trim();
+  if (!id) return;
+  if (!Array.isArray(S.localManualModels)) S.localManualModels = [];
+  if (!S.localManualModels.includes(id)) S.localManualModels.push(id);
+  persist();
+  _syncLocalKeyStore();
+  loadLocalModels().catch(() => {});
+  if (typeof renderAksManualModels === 'function') renderAksManualModels();
+}
+function removeLocalManualModel(id) {
+  if (!Array.isArray(S.localManualModels)) return;
+  S.localManualModels = S.localManualModels.filter(x => x !== id);
+  persist();
+  _syncLocalKeyStore();
+  loadLocalModels().catch(() => {});
+  if (typeof renderAksManualModels === 'function') renderAksManualModels();
 }
 
 function loadDeepSeekModels() {
@@ -3195,15 +3293,27 @@ async function _doContinue(aiIdx, previousFull, sEl, mEl, aiRow) {
       const ep = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse`;
       res = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': S.geminiKey }, body: JSON.stringify(geminiBody), signal: S.ac.signal });
     } else {
-      const ep = isDeepSeek ? 'https://api.deepseek.com/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
-      const auth = isDeepSeek ? S.deepseekKey : S.key;
-      const extraH = isDeepSeek ? {} : { 'HTTP-Referer': location.href.startsWith('http') ? location.href : 'https://nexus-or.local', 'X-Title': 'Atlas' };
+      // Resolve endpoint + auth for every OpenAI-compatible provider
+      const ep = isDeepSeek ? 'https://api.deepseek.com/chat/completions'
+             : S.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions'
+             : S.provider === 'local' ? oaChatUrl(S.localBaseUrl)
+             : 'https://openrouter.ai/api/v1/chat/completions';
+      const auth = isDeepSeek ? S.deepseekKey
+                 : S.provider === 'openai' ? S.openaiKey
+                 : S.provider === 'local' ? (S.localKey || 'none')
+                 : S.key;
+      const extraH = (isDeepSeek || S.provider === 'openai' || S.provider === 'local') ? {} : { 'HTTP-Referer': location.href.startsWith('http') ? location.href : 'https://nexus-or.local', 'X-Title': 'Atlas' };
       const body = {
         model: (S.model.apiId || S.model.id).replace(/:(free|nitro|floor|beta)$/, ''),
         messages: msgsForContinue, stream: true,
         temperature: S.cfg.temp, max_tokens: contMaxTok, top_p: S.cfg.topP,
       };
-      res = await fetch(ep, { method: 'POST', headers: { Authorization: 'Bearer ' + auth, 'Content-Type': 'application/json', ...extraH }, body: JSON.stringify(body), signal: S.ac.signal });
+      if (S.provider === 'local') {
+        // Custom endpoint: probe URL variants (with/without /v1) and cache the working one
+        res = await oaChatFetch(body, S.ac.signal);
+      } else {
+        res = await fetch(ep, { method: 'POST', headers: { Authorization: 'Bearer ' + auth, 'Content-Type': 'application/json', ...extraH }, body: JSON.stringify(body), signal: S.ac.signal });
+      }
     }
 
     if (!res.ok) { let em = 'HTTP ' + res.status; try { const ed = await res.json(); em = ed?.error?.message || em; } catch {} throw new Error(em); }
@@ -3311,8 +3421,8 @@ async function sendMessage() {
   // [MODIFIED] Local model fallback: when no cloud key is set, check if we should use local
   if (!activeKey) {
     if (LocalModelManager.fallbackEnabledButNotDownloaded()) {
-      toast('Local model not downloaded — open Settings → Local Model to download first', 'er');
-      openSettings();
+      toast('Local model not downloaded — open Settings → API → Local Model to download first', 'er');
+      openSettings('api');
       return;
     }
     if (!LocalModelManager.shouldUseFallback()) {
@@ -3487,7 +3597,7 @@ async function sendMessage() {
     requestBody.tool_choice = 'auto';
   }
   // Web search plugin (OpenRouter only)
-  if (S.webSearchMode && S.provider !== 'deepseek' && S.provider !== 'gemini') {
+  if (S.webSearchMode && S.provider !== 'deepseek' && S.provider !== 'gemini' && S.provider !== 'local') {
     requestBody.plugins = [{ id: 'web' }];
   }
 
@@ -3961,7 +4071,7 @@ async function sendMessage() {
     : isOpenAI
     ? 'https://api.openai.com/v1/chat/completions'
     : isLocal
-    ? (S.localBaseUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/v1/chat/completions'
+    ? oaChatUrl(S.localBaseUrl)
     : 'https://openrouter.ai/api/v1/chat/completions';
   const authKey = isDeepSeek ? S.deepseekKey : isOpenAI ? S.openaiKey : isLocal ? (S.localKey || 'none') : S.key;
   const extraHeaders = (isDeepSeek || isOpenAI || isLocal) ? {} : {
@@ -3970,7 +4080,9 @@ async function sendMessage() {
   };
 
   try {
-    let res = await fetch(chatEndpoint, {
+    let res = isLocal
+      ? await oaChatFetch(requestBody, S.ac.signal)
+      : await fetch(chatEndpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authKey}`,
@@ -5059,7 +5171,7 @@ const KeyStore = (() => {
     const key = p === 'deepseek' ? S.deepseekKey
                : p === 'gemini'  ? S.geminiKey
                : p === 'openai'  ? S.openaiKey
-               : p === 'local'   ? JSON.stringify({ baseUrl: S.localBaseUrl, key: S.localKey })
+               : p === 'local'   ? JSON.stringify({ baseUrl: S.localBaseUrl, key: S.localKey, manualModels: S.localManualModels || [] })
                : S.key;
     if (!key) { toast('No active API key to save', 'er'); return; }
     const result = await saveKey(p, key, persistent);
@@ -5079,7 +5191,7 @@ function updateSecurityStatus(source) {
   const settLabel = document.getElementById('key-security-label');
   const settSub = document.getElementById('key-security-sub');
 
-  const hasKey = S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl;
+  const hasKey = hasAnyKey();
 
   if (!hasKey) {
     if (icon) icon.textContent = '🔑';
@@ -5186,6 +5298,8 @@ function persist() {
       // [REMOVED] key, deepseekKey, geminiKey, openaiKey — NEVER stored here
       provider: S.provider || 'openrouter',
       localBaseUrl: S.localBaseUrl || 'http://localhost:11434',
+      localManualModels: Array.isArray(S.localManualModels) ? S.localManualModels : [],
+      localEpVariant: S._localEpVariant || null,
       deepseekModels: S._deepseekModels || null,
       geminiModels: S._geminiModels || null,
       openaiModels: S.openaiModels || [],
@@ -5231,6 +5345,8 @@ function loadFromStorage() {
 
     if (data.provider) S.provider = data.provider;
     if (data.localBaseUrl) S.localBaseUrl = data.localBaseUrl;
+    if (Array.isArray(data.localManualModels)) S.localManualModels = data.localManualModels;
+    if (data.localEpVariant) S._localEpVariant = data.localEpVariant;
     if (data.deepseekModels) S._deepseekModels = data.deepseekModels;
     if (data.geminiModels) S._geminiModels = data.geminiModels;
     if (data.openaiModels) S.openaiModels = data.openaiModels;
@@ -5383,10 +5499,10 @@ function updateKeyUI() {
   const txt = document.getElementById('key-text');
   if (!dot || !txt) return;
   const p = S.provider || 'openrouter';
-  const key = p === 'deepseek' ? S.deepseekKey : p === 'gemini' ? S.geminiKey : p === 'openai' ? S.openaiKey : p === 'local' ? S.localBaseUrl : S.key;
+  const key = p === 'deepseek' ? S.deepseekKey : p === 'gemini' ? S.geminiKey : p === 'openai' ? S.openaiKey : p === 'local' ? (S.localBaseUrl && S.localBaseUrl !== 'http://localhost:11434' ? S.localBaseUrl : (S.localKey || S.localManualModels?.length ? S.localBaseUrl : '')) : S.key;
   if (key) {
     dot.classList.remove('off');
-    const prefix = p === 'openrouter' ? '' : (p.charAt(0).toUpperCase() + p.slice(1) + ': ');
+    const prefix = p === 'openrouter' ? '' : (p === 'local' ? 'Custom: ' : (p.charAt(0).toUpperCase() + p.slice(1) + ': '));
     const display = p === 'local' ? key.replace(/^https?:\/\//, '').slice(0, 22) : key.slice(0, 18) + '…';
     txt.textContent = prefix + display;
   } else {
@@ -5479,7 +5595,7 @@ async function clearAllDataConfirm() {
     try { localStorage.removeItem('atlas_skills_v1'); } catch(e) {}
     try { localStorage.removeItem('atlas_skill_overrides_v1'); } catch(e) {}
     // Reset state
-    S.key = ''; S.deepseekKey = ''; S.geminiKey = ''; S.openaiKey = ''; S.localKey = ''; S.localBaseUrl = 'http://localhost:11434';
+    S.key = ''; S.deepseekKey = ''; S.geminiKey = ''; S.openaiKey = ''; S.localKey = ''; S.localBaseUrl = 'http://localhost:11434'; S.localManualModels = []; S._localEpVariant = null;
     S.convs = []; S.msgs = []; S.chatId = null;
     renderChatList(); renderMessages();
     updateSecurityStatus('none');
@@ -5556,6 +5672,11 @@ async function initSecureStorage() {
         const lc = JSON.parse(keys.local);
         if (lc.baseUrl) S.localBaseUrl = lc.baseUrl;
         if (lc.key)     S.localKey = lc.key;
+        if (Array.isArray(lc.manualModels) && lc.manualModels.length) {
+          // Merge (don't clobber) — localStorage may hold newer manual additions
+          const cur = Array.isArray(S.localManualModels) ? S.localManualModels : [];
+          S.localManualModels = [...new Set([...cur, ...lc.manualModels])];
+        }
       } catch(e) { /* old string format — ignore */ }
     }
   } catch(e) {
@@ -5638,7 +5759,7 @@ async function initSecureStorage() {
   updateSecurityStatus(keySource);
 
   // 8. Load models if key is present; update sidebar footer
-  const hasKey = S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl;
+  const hasKey = hasAnyKey();
   if (hasKey) {
     setTimeout(async () => {
       await reloadModels();
@@ -5800,7 +5921,28 @@ function getStorageSize() {
   } catch(e) { return '?'; }
 }
 
-function openSettings() {
+// ── SETTINGS TABS ────────────────────────────────────────────────────
+// Tabs: appearance | model | api | skills | data
+const SETTINGS_TABS = ['appearance', 'model', 'api', 'skills', 'data'];
+
+function switchSettingsTab(tab, btn) {
+  if (!SETTINGS_TABS.includes(tab)) tab = 'appearance';
+  S._settingsTab = tab;
+  // Toggle panels
+  SETTINGS_TABS.forEach(t => {
+    const p = document.getElementById('stab-' + t);
+    if (p) p.classList.toggle('active', t === tab);
+    const b = document.getElementById('stab-btn-' + t);
+    if (b) b.classList.toggle('active', t === tab);
+  });
+  // Keep the modal scrolled to top when switching
+  const body = document.getElementById('settings-tab-body');
+  if (body) body.scrollTop = 0;
+  // Inline button reference (for data-click="this" style calls)
+  if (btn && btn.classList && !btn.id) { /* noop — id-based buttons drive styling */ }
+}
+
+function openSettings(tab) {
   document.getElementById('budget-input').value = S.budget || '';
   document.getElementById('modal-cost').textContent = '$' + S.totalCost.toFixed(4);
   // [CHANGED] Storage info now loaded from IndexedDB
@@ -5826,14 +5968,9 @@ function openSettings() {
   updateSkillPill();
   
   // Show overlay and settings modal
-  const overlay = document.querySelector('.modal-overlay');
-  if (overlay) {
-    overlay.style.display = 'flex';
-    overlay.classList.add('open');
-  }
   const settingsModal = document.getElementById('settings-modal');
   if (settingsModal) {
-    settingsModal.style.display = 'block';
+    settingsModal.style.display = 'flex';
     settingsModal.classList.add('open');
   }
   
@@ -5856,6 +5993,9 @@ function openSettings() {
     else if (S._geminiIsPaid === false) tierLabel.textContent = '☁ Free tier';
     else tierLabel.textContent = 'Detecting…';
   }
+
+  // Activate requested tab (or last-used tab, default appearance)
+  switchSettingsTab(tab || S._settingsTab || 'appearance');
 }
 
 // [REMOVED] exportMemory and importMemory replaced by exportAllData / importAllData (secure versions)
@@ -6100,7 +6240,7 @@ async function sendFromHistory() {
     requestBody.tool_choice = 'auto';
   }
 
-  // ── DEEPSEEK / OPENROUTER / LOCAL BRANCH ──
+  // ── DEEPSEEK / OPENROUTER / OPENAI / CUSTOM BRANCH ──
   const isDeepSeek2 = S.provider === 'deepseek';
   const isOpenAI2   = S.provider === 'openai';
   const isLocal2    = S.provider === 'local';
@@ -6109,7 +6249,7 @@ async function sendFromHistory() {
     : isOpenAI2
     ? 'https://api.openai.com/v1/chat/completions'
     : isLocal2
-    ? (S.localBaseUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/v1/chat/completions'
+    ? oaChatUrl(S.localBaseUrl)
     : 'https://openrouter.ai/api/v1/chat/completions';
   const fetchHeaders2 = isDeepSeek2
     ? { 'Authorization': `Bearer ${S.deepseekKey}`, 'Content-Type': 'application/json' }
@@ -6120,7 +6260,9 @@ async function sendFromHistory() {
     : { 'Authorization': `Bearer ${S.key}`, 'Content-Type': 'application/json', 'HTTP-Referer': safeReferer, 'X-Title': 'Atlas' };
 
   try {
-    const res = await fetch(fetchUrl2, {
+    const res = isLocal2
+      ? await oaChatFetch(requestBody, S.ac.signal)
+      : await fetch(fetchUrl2, {
       method: 'POST',
       headers: fetchHeaders2,
       body: JSON.stringify(requestBody),
@@ -11258,7 +11400,7 @@ const AKS_DESCS = {
   deepseek:   'Get a key at <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" style="color:var(--acc)">platform.deepseek.com</a>.',
   gemini:     'Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--acc)">aistudio.google.com</a>.',
   openai:     'Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--acc)">platform.openai.com</a>.',
-  local:      'Connect to Ollama, LM Studio, or any OpenAI-compatible local server. API key is optional.',
+  local:      'Any OpenAI-compatible endpoint — local (Ollama, LM Studio, llama.cpp, vLLM, Jan) or cloud (Groq, Mistral, Together, xAI, Cerebras, SambaNova…). Enter the base URL; <b>/v1 is auto-detected</b>. Key optional.',
 };
 
 function aksSwitch(prov, btn) {
@@ -11289,8 +11431,9 @@ function aksSwitch(prov, btn) {
     if (localWrap) localWrap.style.display = 'block';
     const urlInput = document.getElementById('aks-local-url');
     if (urlInput) urlInput.value = S.localBaseUrl || 'http://localhost:11434';
-    if (keyLabel) keyLabel.textContent = 'API Key (optional)';
+    if (keyLabel) keyLabel.textContent = 'API Key (optional — e.g. gsk_…, Bearer auth)';
     if (keyInput) keyInput.value = S.localKey || '';
+    if (typeof renderAksManualModels === 'function') renderAksManualModels();
   } else {
     if (localWrap) localWrap.style.display = 'none';
     if (keyLabel) keyLabel.textContent = 'API Key';
@@ -11319,7 +11462,8 @@ function _aksShowStatus(prov) {
     deepseek:   !!S.deepseekKey,
     gemini:     !!S.geminiKey,
     openai:     !!S.openaiKey,
-    local:      !!(S.localBaseUrl && S.localBaseUrl !== 'http://localhost:11434'),
+    local:      !!(S.localKey || (Array.isArray(S.localManualModels) && S.localManualModels.length)
+                   || (S.localBaseUrl && S.localBaseUrl !== 'http://localhost:11434')),
   }[prov];
   if (connected) {
     okEl.textContent = '✓ Connected';
@@ -11343,20 +11487,50 @@ async function aksSaveKey() {
 
   if (prov === 'local') {
     const urlInput = document.getElementById('aks-local-url');
-    const urlVal = urlInput ? urlInput.value.trim() : '';
-    if (!urlVal) {
-      if (errEl) { errEl.textContent = 'Server URL is required.'; errEl.style.display = 'block'; }
+    const rawUrl = urlInput ? urlInput.value.trim() : '';
+    const urlVal = oaNormalizeBase(rawUrl);
+    if (!rawUrl) {
+      if (errEl) { errEl.textContent = 'Endpoint URL is required.'; errEl.style.display = 'block'; }
       return;
     }
-    S.localBaseUrl = urlVal;
-    S.localKey = val || '';
+    try { new URL(urlVal); } catch {
+      if (errEl) { errEl.textContent = 'Invalid URL — e.g. http://localhost:11434 or https://api.groq.com/openai/v1'; errEl.style.display = 'block'; }
+      return;
+    }
+    const btn = document.getElementById('aks-connect-btn');
+    const prevTxt = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+    let nModels = 0, warn = null;
+    try {
+      S.localBaseUrl = urlVal;
+      S.localKey = val || '';
+      S._localEpVariant = null;
+      await loadLocalModels(true);
+      nModels = (S.allModels || []).length;
+    } catch(e) {
+      warn = e.message || 'Could not reach endpoint';
+      // Keep config anyway if the user provided manual model IDs
+      if (!Array.isArray(S.localManualModels) || !S.localManualModels.length) {
+        if (btn) { btn.disabled = false; btn.textContent = prevTxt || 'Connect'; }
+        if (errEl) { errEl.textContent = 'Could not connect: ' + warn; errEl.style.display = 'block'; }
+        return;
+      }
+    }
+    S.provider = 'local';
     persist();
-    KeyStore.saveKey('local', JSON.stringify({ baseUrl: urlVal, key: val }), false)
+    KeyStore.saveKey('local', JSON.stringify({ baseUrl: urlVal, key: val, manualModels: S.localManualModels || [] }), false)
       .then(src => updateSecurityStatus(src));
     updateKeyUI();
-    reloadModels();
-    if (okEl) { okEl.textContent = '✓ Local server connected'; okEl.style.display = 'block'; }
-    toast('Local server connected', 'ok');
+    if (btn) { btn.disabled = false; btn.textContent = prevTxt || 'Connect'; }
+    if (okEl) {
+      okEl.textContent = warn
+        ? '⚠ Saved — models could not be listed (' + warn + '). Manual model IDs will be used.'
+        : '✓ Connected — ' + nModels + ' model(s) found';
+      okEl.style.display = 'block';
+      if (warn) okEl.style.color = 'var(--ylw,#f5a623)'; else okEl.style.color = 'var(--grn)';
+    }
+    toast(warn ? 'Endpoint saved (model list unavailable)' : 'Custom endpoint connected', warn ? '' : 'ok');
+    _updateSidebarFooter();
     return;
   }
 
@@ -11404,7 +11578,7 @@ async function aksClearKey() {
   else if (prov === 'deepseek') S.deepseekKey = '';
   else if (prov === 'gemini') S.geminiKey = '';
   else if (prov === 'openai') S.openaiKey = '';
-  else if (prov === 'local') { S.localBaseUrl = ''; S.localKey = ''; }
+  else if (prov === 'local') { S.localBaseUrl = 'http://localhost:11434'; S.localKey = ''; S.localManualModels = []; S._localEpVariant = null; }
 
   KeyStore.clearKeys ? KeyStore.clearKeys(prov) : persist();
   persist();
@@ -11424,6 +11598,31 @@ function aksInit() {
   aksSwitch(_aksProvider, document.getElementById('aks-btn-' + _aksProvider));
 }
 
+/** Render the manually-added model chips for the custom endpoint */
+function renderAksManualModels() {
+  const wrap = document.getElementById('aks-manual-wrap');
+  if (!wrap) return;
+  const list = Array.isArray(S.localManualModels) ? S.localManualModels : [];
+  wrap.style.display = list.length ? 'block' : 'none';
+  const el = document.getElementById('aks-manual-list');
+  if (el) {
+    el.innerHTML = list.map(id =>
+      `<span class="oa-chip">${esc(id)}<span class="oa-chip-x" data-click="removeLocalManualModel('${esc(id).replace(/'/g, "&#39;")}')">✕</span></span>`
+    ).join('');
+  }
+}
+
+/** Add a manual model ID from the input field */
+function aksAddManualModel() {
+  const inp = document.getElementById('aks-manual-input');
+  if (!inp) return;
+  const id = inp.value.trim();
+  if (!id) return;
+  addLocalManualModel(id);
+  inp.value = '';
+  toast('Model added: ' + id, 'ok');
+}
+
 // ── [NEW] SIDEBAR FOOTER UPDATER ──────────────────────────────────────────
 /**
  * Updates the sidebar footer to show either:
@@ -11438,7 +11637,7 @@ function _updateSidebarFooter() {
   const keyText     = document.getElementById('key-text');
 
   const googleConnected = _gTokenValid && _gTokenValid() && S.google?.user;
-  const hasKey = !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl);
+  const hasKey = hasAnyKey();
 
   if (googlePanel) googlePanel.style.display = googleConnected ? 'block' : 'none';
 
@@ -11471,13 +11670,7 @@ function _updateSidebarFooter() {
 
 // Called from sidebar footer click when NOT signed in to Google
 function _akdClick() {
-  openSettings();
-  setTimeout(() => {
-    const hasKey = !!(S.key || S.deepseekKey || S.geminiKey || S.openaiKey || S.localBaseUrl);
-    // Scroll to Google sign-in if no key, otherwise to API key section
-    const target = document.getElementById(hasKey ? 'api-key-section' : 'google-signin-section');
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 150);
+  openSettings('api');
 }
 
 // ── DATA-ATTRIBUTE DELEGATION (onclick→data-click, onmousedown→data-mdown) ──

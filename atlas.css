@@ -410,6 +410,23 @@ body:not(.sidebar-pinned) #sidebar.coll{width:0;min-width:0}
 .budget-sym{color:var(--tx3);font-size:14px}
 .budget-field{flex:1;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rx);color:var(--tx1);font-size:clamp(12px,1.5vw,13px);font-family:'DM Mono',monospace;outline:none;transition:border-color .15s}
 .budget-field:focus{border-color:var(--acc2)}
+/* ── SETTINGS TABS ── */
+#settings-modal .modal.stabs-modal{display:flex;flex-direction:column;overflow:hidden;padding-bottom:14px}
+.stabs-bar{display:flex;gap:3px;padding:4px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:14px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.stabs-bar::-webkit-scrollbar{display:none}
+.stab-btn{flex:1 0 auto;white-space:nowrap;padding:7px 10px;border:none;border-radius:6px;background:transparent;color:var(--tx2);font-size:clamp(9px,1.2vw,11px);font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif}
+.stab-btn:hover{background:var(--hov);color:var(--tx1)}
+.stab-btn.active{background:var(--acc);color:#fff}
+.stabs-body{flex:1;min-height:0;overflow-y:auto;margin:0 -4px;padding:0 4px}
+.stabs-panel{display:none}
+.stabs-panel.active{display:block;animation:mdi .15s ease}
+#settings-modal .modal-actions{margin-top:12px;padding-top:12px;border-top:1px solid var(--bdr);flex-shrink:0}
+/* Custom OpenAI-compatible endpoint UI */
+.oa-preset{padding:3px 9px;background:var(--elev);border:1px solid var(--bdr);border-radius:4px;font-size:10px;color:var(--tx2);cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif}
+.oa-preset:hover{border-color:var(--acc2);color:var(--tx1);background:var(--hov)}
+.oa-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;background:var(--elev);border:1px solid var(--acc2);border-radius:10px;font-size:10px;color:var(--tx1);font-family:'DM Mono',monospace}
+.oa-chip-x{cursor:pointer;color:var(--tx3);font-size:9px;padding:0 2px;border-radius:50%}
+.oa-chip-x:hover{color:var(--red)}
 /* ── TOGGLE PILL ── */
 .toggle-pill{position:relative;display:inline-flex;cursor:pointer;user-select:none}
 .toggle-pill input{position:absolute;opacity:0;width:0;height:0}

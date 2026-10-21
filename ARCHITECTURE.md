@@ -125,7 +125,7 @@ TOOL DEFINITIONS                 1562–1623  web_search, calculator, time, imag
 TOOL EXECUTION                   1625–1743  executeToolCall, tool confirm dialog
 IMAGE GENERATION                 1744–1918  generateImage, renderImageResult
 API KEY UI                       1920–2233  Tabbed inline key input UI
-LOCAL AI PROVIDER CONFIGS        2234–2466  Provider base URLs, model fetch logic
+OPENAI-COMPAT PROVIDER           2234–2500  URL normalization, endpoint probing, model discovery, manual models
 MODEL SELECTOR                   2466–2661  Dropdown, filter, favourites
 RIGHT MESSAGE NAV                2616–2661  DeepSeek-style compact msg list
 SIDEBAR                          2662–2759  Conversations, search, delete
@@ -137,7 +137,7 @@ RENDER IMAGES                    4165–4264  Image display in chat
 MARKDOWN RENDERER                4264–4443  parseMarkdown + code block detection
 FILES & PASTE                    4444–4603  File attachments, clipboard paste
 COST TRACKER                     4605–4679  calcCost, updateCostDisplay
-SETTINGS                         4680–6036  Settings modal, save/load/apply
+SETTINGS                         4680–6036  Tabbed Settings modal (Appearance/Model/API/Skills/Data), save/load/apply
 ARTIFACT PANEL                   6130–6454  previewCode, artifact tabs, iframe
 VISUAL EDITOR (DOCX)             6455–8036  Word-like rich-text editor
 VISUAL EDITOR (PPTX)             8037–8831  PowerPoint slide editor
@@ -160,6 +160,23 @@ LOCAL MODEL MANAGER              10125–11012 WebLLM engine, download, inferenc
 ---
 
 ## Key Data Flows
+
+### Custom (OpenAI-compatible) Endpoint Resolution
+
+Any provider speaking the OpenAI chat-completions protocol connects through the **⚡ Custom** tab. All URL math is centralized in `atlas.js` (~line 2270):
+
+```
+user input ──▶ oaNormalizeBase()        trim / strip slashes / add http:// if missing
+            ──▶ oaCandidateUrls(path)   [user layout, /v1 layout, unversioned layout] deduped
+                          │
+            ┌───────────┴───────────┐
+       model listing              chat completions
+   GET /v1/models (or /models)   oaChatFetch() — probes candidates on 404/405/501,
+   then GET /api/tags (Ollama)   caches winner in S._localEpVariant (persisted),
+   then manual model IDs         sends optional Bearer key
+```
+
+Key state: `S.localBaseUrl`, `S.localKey`, `S.localManualModels[]`, `S._localEpVariant{baseUrl,chat}`. The `local` provider id is kept for backward compatibility with saved settings. All three stream loops (send, regenerate, continue) plus the skill classifier route through these helpers, so a Perplexity-style unversioned gateway or a Groq-style `/openai/v1` base both work without configuration.
 
 ### Message Send Pipeline
 
