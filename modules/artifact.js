@@ -603,6 +603,28 @@ ${opts.standalone ? '' : `<button id="atlas-edit-fab" type="button">✨ Edit wit
     return false;
   }
 
+  // [NEW] Re-render the active doc/mermaid frame after a theme switch — the
+  // frame HTML bakes in theme-aware colors, so it must be rebuilt when the
+  // user toggles Dark/Light. Preserves the reader's scroll position.
+  function rerenderActive() {
+    try {
+      const panel = document.getElementById('artifact-panel');
+      if (!panel || !panel.classList.contains('open')) return;
+      const frame = document.getElementById('artifact-frame');
+      const arts = (typeof _artifacts !== 'undefined') ? _artifacts : [];
+      const art = arts[(typeof _activeArt !== 'undefined') ? _activeArt : 0];
+      if (!frame || !art || !art._doc) return;
+      let sx = 0, sy = 0;
+      try { sx = frame.contentWindow.scrollX || 0; sy = frame.contentWindow.scrollY || 0; } catch (_) {}
+      if (loadFrame(art) && (sx || sy)) {
+        frame.addEventListener('load', function _restoreScroll() {
+          frame.removeEventListener('load', _restoreScroll);
+          try { frame.contentWindow.scrollTo(sx, sy); } catch (_) {}
+        });
+      }
+    } catch (_) {}
+  }
+
   // ── Live render (throttled) ─────────────────────────────────────────────
   function _schedLive(rec) {
     if (!rec) return;
@@ -1172,7 +1194,7 @@ ${opts.standalone ? '' : `<button id="atlas-edit-fab" type="button">✨ Edit wit
     getSystemPrompt, relevantArtifact, buildArtifactContextInjection,
     // panel ui
     toggleVerMenu, switchVersion, openExportMenu, exportAs, openWordForActive,
-    openInWordEditor, applyManualEdit, closeMenus,
+    openInWordEditor, applyManualEdit, closeMenus, rerenderActive,
     // edit modal
     cancelEditModal, sendEditModal,
     // persistence

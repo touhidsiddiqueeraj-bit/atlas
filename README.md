@@ -4,9 +4,12 @@
 
 - **6 AI providers**: OpenRouter, DeepSeek, Gemini, OpenAI, Custom (any OpenAI-compatible endpoint), local WebGPU
 - **Agent Mode**: Generate multi-file websites, preview them live, edit any file, and serve to other devices on your Wi-Fi — all from the sidebar
+- **Artifact documents**: Claude-style — reports, HTML pages, SVGs, and diagrams open as live, versioned documents in a side panel
 - **Offline-capable**: WebGPU local models via WebLLM (TinyLlama, StableLM, Gemma)
-- **No build step**: Five files — `index.html`, `atlas.css`, `atlas.js`, `modules/utils.js`, `modules/agent.js` — serve from any HTTP server
+- **No build step**: Six files — `index.html`, `atlas.css`, `atlas.js`, `modules/utils.js`, `modules/agent.js`, `modules/artifact.js` — serve from any HTTP server
 - **Zero telemetry**: All network traffic goes only to your chosen AI providers and Google APIs (if signed in)
+
+![Atlas — chat alongside a live artifact document](screenshots/hero-artifact-panel.png)
 
 ---
 
@@ -28,7 +31,7 @@ python3 -m http.server 8000
 
 ### Using Offline (WebGPU)
 
-1. Open **Settings** → **Local Model**
+1. Open **Settings** → **🔌 API** tab → **Local Model (WebGPU)**
 2. Toggle **"Use local model when no API key"**
 3. Click **Download** next to a model (TinyLlama 1.1B ~638 MB, StableLM 1.6B ~900 MB, Gemma 2B ~1.2 GB)
 4. Once downloaded, Atlas will automatically use the local model when no cloud key is set
@@ -58,6 +61,8 @@ Chat with 6 provider backends through a unified interface:
 - **Smart URL handling** — enter the base URL with or without `/v1`; Atlas probes layouts (`/v1/chat/completions` vs `/chat/completions`), remembers the working one, and never double-appends `/v1`
 - **Model discovery** — tries OpenAI-style `/v1/models`, then Ollama-native `/api/tags`, then your manually-added model IDs (with removable chips) for servers that don't list models
 - **Bearer auth** — optional API key is sent as `Authorization: Bearer …` for gateways that require it
+
+![Custom OpenAI-compatible endpoint — presets, URL auto-detection, manual model chips](screenshots/settings-api-custom.png)
 
 **Streaming** — responses appear token-by-token as they arrive. **Abort** — click the send button (now a stop icon) mid-generation. **Continuation** — truncated responses get a "Continue" button to resume. **Web search** — toggle to ground responses with real-time search results (OpenRouter plugin or Gemini Google Search grounding).
 
@@ -106,6 +111,8 @@ Code blocks in AI responses can be opened in a side panel with three viewing mod
 - Artifact title auto-extracted from `<title>` tags or filename comments
 - **Live error overlay** — runtime JS errors in the preview surface as a dismissible banner with the error message, file, and line number (so you never stare at a blank iframe wondering what went wrong)
 
+![The artifact panel with source, preview, and editor views](screenshots/integrated-ide.png)
+
 ---
 
 ### Artifact Document System (Claude-style)
@@ -124,6 +131,8 @@ Atlas implements a Claude.ai-style artifact pipeline for substantial, self-conta
 2. An incremental stream parser detects the tags mid-stream — the artifact panel opens automatically and the content **renders live** as tokens arrive (no waiting for the full response).
 3. The chat shows a compact **artifact card** (title, type, version, live char count) with a "Preview in chat" expander — the full content lives in the panel, not the chat.
 4. When the model updates the same `identifier`, the update becomes a **new version** (v1 → v2 → v3…) — switch or restore any version from the **vN ▾ dropdown** in the panel header.
+
+![Artifact version history — every revision is kept, restorable, and exportable](screenshots/artifact-versions.png)
 
 **Editing — three ways (all create a new version):**
 - **Chat**: *"add a conclusion to the brief"* — the current artifact content is injected into the system prompt and the model re-emits the full updated artifact
@@ -188,6 +197,8 @@ Built-in WYSIWYG editors for DOCX and PPTX artifacts, accessible from the artifa
 - Insert images and divider shapes
 - Fullscreen presenter view
 
+![The visual HTML editor running inside the artifact panel](screenshots/visual-html-editor.png)
+
 ---
 
 ### Content Creation
@@ -235,6 +246,8 @@ Skills inject specialized system prompts to adjust Atlas's response style:
 **Smart Auto-Detect** — when enabled, Atlas scans your message as you type and suggests the most relevant skill. Click to activate. Auto-detect only fires on the first message of a conversation.
 
 **Custom Skills** — create your own skills with a name, description, and custom system prompt. Saved to localStorage. Listed alongside built-in skills in the settings panel.
+
+![The skills menu with specialist personas and auto-detect](screenshots/skills-menu.png)
 
 ---
 
@@ -294,6 +307,8 @@ Run small LLMs directly in the browser using WebLLM (v0.2.46) with WebGPU accele
 
 Open via the gear icon — organized into tabs so nothing is crowded:
 
+![Settings — five tabs covering appearance, model, API, skills, and data](screenshots/settings-tabs.png)
+
 | Tab | Contains |
 |-----|----------|
 | **🎨 Appearance** | Dark/Light toggle, 9 fonts (DM Sans, Inter, Geist, Fira Code, JetBrains Mono, Source Serif 4, Lora, Nunito, Syne), font size slider (12–20px), 3 chat density modes |
@@ -306,10 +321,12 @@ Handy shortcuts: the sidebar **cost tracker** opens the Model tab, the **securit
 
 ### Themes & Display
 
-- **Theme**: Dark (default) or Light — CSS custom properties throughout
+- **Theme**: Dark (default) or Light — CSS custom properties throughout, and open artifact documents re-render to match the new theme
 - **Fonts**: 9 options loaded from Google Fonts on selection
 - **Font size**: 12–20px slider with proportional element scaling
 - **Density**: Compact / Normal / Spacious (controls message padding, bubble padding, chat area spacing)
+
+![Light theme — the UI and the open artifact document both restyle instantly](screenshots/light-theme.png)
 
 ---
 
@@ -382,13 +399,18 @@ Handy shortcuts: the sidebar **cost tracker** opens the Model tab, the **securit
 
 ## Architecture Overview
 
-**Three files, no build step, no framework:**
+**Six files, no build step, no framework:**
 
 | File | Lines | Role |
 |------|-------|------|
-| `index.html` | ~970 | All HTML elements, element IDs, inline event handler attributes |
-| `atlas.css` | ~1,430 | All styles, CSS custom properties, responsive rules, animations |
-| `atlas.js` | ~11,000 | All application logic |
+| `index.html` | ~1,070 | All HTML elements, element IDs, inline event handler attributes |
+| `atlas.css` | ~1,990 | All styles, CSS custom properties, responsive rules, animations |
+| `atlas.js` | ~11,700 | All application logic |
+| `modules/utils.js` | ~55 | Shared helpers (`esc`, base64 codecs, `clampLen`) |
+| `modules/agent.js` | ~1,020 | Agent Mode: multi-file extraction, project preview, zip/serve |
+| `modules/artifact.js` | ~1,200 | Artifact Document System: stream parser, versioned store, views, exports |
+
+Docs and screenshots live in `screenshots/` (referenced throughout this README).
 
 **State** — single global `S` object with ~20 fields for model, config, conversations, UI state. `persist()` serializes settings to localStorage.
 

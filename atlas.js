@@ -10037,6 +10037,11 @@ function setTheme(t) {
   document.body.classList.toggle('light', t === 'light');
   S.theme = t;
   persist();
+  // [NEW] Doc/mermaid artifact frames bake theme colors into their HTML —
+  // rebuild the active one so it matches the new theme (scroll is preserved).
+  if (window.ArtifactDoc && typeof ArtifactDoc.rerenderActive === 'function') {
+    try { ArtifactDoc.rerenderActive(); } catch (_) {}
+  }
   const dark = document.getElementById('theme-dark-btn');
   const light = document.getElementById('theme-light-btn');
   if (dark && light) {
@@ -10692,9 +10697,11 @@ function applyPresetPrompt(key) {
 }
 
 // Restore global sys prompt textarea and update Google UI when settings opens
+// [FIXED] Forward the requested tab — the wrapper used to drop its argument, so
+// entry points like cost-tracker→model or sidebar→api opened the last-used tab.
 const _origOpenSettings = openSettings;
-openSettings = function() {
-  _origOpenSettings();
+openSettings = function(tab) {
+  _origOpenSettings(tab);
   const el = document.getElementById('global-sysprompt-input');
   if (el && S.cfg.globalSysPrompt) el.value = S.cfg.globalSysPrompt;
   _gUpdateUI();

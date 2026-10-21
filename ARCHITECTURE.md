@@ -11,11 +11,14 @@ Atlas is a single-page application with no framework, no build step, and no back
 ```
 index.html          (~1,040 lines) — All HTML elements, element IDs, inline event handler attributes
 atlas.css           (~2,000 lines) — All styles, CSS custom properties, animations, responsive rules
-atlas.js            (~11,500 lines) — All application logic (chat, streaming, artifacts, editors)
+atlas.js            (~11,700 lines) — All application logic (chat, streaming, artifacts, editors)
 modules/utils.js    (~55 lines) — Shared helpers: esc(), b64ToUtf8(), utf8ToB64(), clampLen()
 modules/agent.js    (~1,020 lines) — Agent Mode: file extraction, project preview, zip/serve bundle
-modules/artifact.js (~1,140 lines) — Artifact Document System: stream parser, versioned store,
-                                   doc/mermaid views, chat cards, exports, Word-editor bridge
+modules/artifact.js (~1,210 lines) — Artifact Document System: stream parser, versioned store,
+                                   doc/mermaid views (theme-aware, rebuilt on setTheme), chat
+                                   cards, exports, Word-editor bridge
+screenshots/        — App screenshots embedded in README.md (dark/light themes, artifact panel,
+                                   version history, settings tabs)
 ```
 
 **Load order** (defined in `index.html`):
